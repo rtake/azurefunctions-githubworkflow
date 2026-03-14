@@ -1,3 +1,9 @@
+import {
+  app,
+  HttpRequest,
+  HttpResponseInit,
+  InvocationContext,
+} from "@azure/functions";
 import { DefaultAzureCredential } from "@azure/identity";
 import { fetchAgentDefinition } from "../azure/agent-service";
 import { fetchAgentName } from "../azure/management";
@@ -11,6 +17,8 @@ const AGENT_DEPLOYMENTS_MESSAGE =
 const NO_RELEVANT_OPERATION_MESSAGE = "Not relevant operation";
 
 module.exports = async function (context, req) {
+  console.log("Received request:", req);
+
   const {
     data: { alertContext },
   } = JSON.parse(req.rawBody);
@@ -80,3 +88,9 @@ module.exports = async function (context, req) {
     body: "Workflow triggered",
   };
 };
+
+app.http("trigger-workflow", {
+  methods: ["POST"],
+  authLevel: "function",
+  handler: module.exports,
+});
