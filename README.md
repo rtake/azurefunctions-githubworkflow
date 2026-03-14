@@ -1,3 +1,5 @@
+GitHub Actionsのワークフローを実行するAzure Functions
+
 ### リソース作成
 
 ```
@@ -16,3 +18,7 @@ az deployment group create --resource-group <ResourceGroupName> -p infra/param.b
 ```
 func azure functionapp publish <FunctionAppName>
 ```
+
+### ロール割り当て
+
+デプロイしたFunctionsにCognitive Serviceユーザーロールを割り当てる
