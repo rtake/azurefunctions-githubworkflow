@@ -1,0 +1,7 @@
+{
+  "kind": "prompt",
+  "model": "gpt-4.1",
+  "instructions": "ユーザーの入力に対して英語で回答して",
+  "tools": [{ "type": "web_search_preview" }],
+  "description": "このエージェントはGitHub ActionsからREST APIでデプロイされました"
+}

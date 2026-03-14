@@ -1,0 +1,43 @@
+name: agent-pr
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_name:
+        required: true
+        type: string
+      agent_definition:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: |
+          BRANCH=agent-${{ github.event.inputs.deployment_name }}-${{ github.run_id }}
+          git checkout -b $BRANCH
+
+          mkdir -p agents
+          echo '${{ github.event.inputs.agent_definition }}' > agents/${{ github.event.inputs.deployment_name }}.json
+
+          git config user.name bot
+          git config user.email bot@users.noreply.github.com
+
+          git add .
+          git commit -m "Add agent"
+          git push origin HEAD
+
+      - run: |
+          gh pr create \
+            --title "Agent ${{ github.event.inputs.deployment_name }}" \
+            --body "Auto generated"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
