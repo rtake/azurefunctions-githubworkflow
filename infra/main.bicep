@@ -11,6 +11,15 @@ param runtime string = 'node'
 @description('Runtime version')
 param runtimeVersion string = '20'
 
+@description('GitHub owner (non-secret, optional)')
+param githubOwner string = ''
+
+@description('GitHub repo (non-secret, optional)')
+param githubRepo string = ''
+
+@description('GitHub token with permissions to trigger workflow. Inject via CI, do NOT put in source.')
+param githubToken string = ''
+
 var resourceToken = take(toLower(uniqueString(subscription().id, location)), 6)
 
 var storageName = 'st${resourceToken}'
@@ -64,6 +73,11 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
       AzureWebJobsStorage: storageConnectionString
       FUNCTIONS_WORKER_RUNTIME: runtime
       FUNCTIONS_EXTENSION_VERSION: '~4'
+
+      // GitHub info for workflow trigger
+      GITHUB_OWNER: githubOwner
+      GITHUB_REPO: githubRepo
+      GITHUB_TOKEN: githubToken
     }
   }
 }
