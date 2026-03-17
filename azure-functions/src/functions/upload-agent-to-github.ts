@@ -4,6 +4,9 @@ import {
   HttpResponseInit,
   InvocationContext,
 } from "@azure/functions";
+import { DefaultAzureCredential } from "@azure/identity";
+import { fetchAgentName } from "../azure/management";
+import { fetchAgentDefinition } from "../azure/agent-service";
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_OWNER = process.env.GITHUB_OWNER;
@@ -54,7 +57,35 @@ async function uploadAgentToGitHub(
   context.log("Received request: %o", req);
 
   const body = (await req.json()) as any;
-  const { agentDefinition, deploymentName } = body;
+  const {
+    subscriptionId,
+    resourceGroup,
+    accountName,
+    projectName,
+    appName,
+    deploymentName,
+  } = body;
+
+  const credential = new DefaultAzureCredential();
+
+  const agentName = await fetchAgentName({
+    credential,
+    subscriptionId,
+    resourceGroup,
+    accountName,
+    projectName,
+    appName,
+    deploymentName,
+    context,
+  });
+  context.log("agentName: %o", agentName);
+
+  const agentDefinition = await fetchAgentDefinition({
+    credential,
+    accountName,
+    projectName,
+    agentName,
+  });
 
   if (!agentDefinition || !deploymentName) {
     return {
@@ -65,14 +96,14 @@ async function uploadAgentToGitHub(
   context.log("agentDefinition: %o", agentDefinition);
   context.log("deploymentName: %o", deploymentName);
 
-  const triggerResult = await triggerGitHubWorkflow({
+  const triggerWorkflowResult = await triggerGitHubWorkflow({
     accountName: body.accountName,
     projectName: body.projectName,
     appName: body.appName,
     deploymentName: body.deploymentName,
     agentDefinition: body.agentDefinition,
   });
-  context.log("GitHub workflow trigger result: %o", triggerResult);
+  context.log("GitHub workflow trigger result: %o", triggerWorkflowResult);
 
   return {
     status: 200,

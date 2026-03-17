@@ -1,3 +1,4 @@
+import { InvocationContext } from "@azure/functions";
 import { DefaultAzureCredential } from "@azure/identity";
 
 const SCOPE = "https://management.azure.com/.default";
@@ -10,6 +11,7 @@ export const fetchAgentName = async ({
   projectName,
   appName,
   deploymentName,
+  context,
 }: {
   credential: DefaultAzureCredential;
   subscriptionId: string;
@@ -18,6 +20,7 @@ export const fetchAgentName = async ({
   projectName: string;
   appName: string;
   deploymentName: string;
+  context: InvocationContext;
 }): Promise<string> => {
   const token = await credential.getToken(SCOPE);
 
@@ -34,6 +37,8 @@ export const fetchAgentName = async ({
       Authorization: `Bearer ${token.token}`,
     },
   });
+  context.log("Management API response status: %o", deploymentRes.status);
+
   const deployment = await deploymentRes.json();
   const { agentName } = deployment.properties.agents[0];
 

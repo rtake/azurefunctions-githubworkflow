@@ -67,6 +67,7 @@ export async function triggerWorkflow(
       projectName,
       appName,
       deploymentName,
+      context,
     });
     context.log("agentName: %o", agentName);
 
