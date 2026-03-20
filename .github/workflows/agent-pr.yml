@@ -30,6 +30,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Debug input
+        run: |
+          echo "===== RAW INPUT (START) ====="
+          printf '%s\n' "${{ github.event.inputs.agent_definition }}"
+          echo "===== RAW INPUT (END) ====="
+
+          echo "===== LENGTH ====="
+          printf '%s' "${{ github.event.inputs.agent_definition }}" | wc -c
+
+      - name: Validate JSON
+        run: |
+          set +e
+          printf '%s' "${{ github.event.inputs.agent_definition }}" | jq . > /dev/null
+          STATUS=$?
+          if [ $STATUS -ne 0 ]; then
+            echo "❌ Invalid JSON detected"
+            exit 1
+          else
+            echo "✅ JSON is valid"
+          fi
+
       - name: Create branch and write file
         run: |
           set -e
@@ -42,7 +63,9 @@ jobs:
 
           FILE="$DIRECTORY/${{ github.event.inputs.app_name }}.json"
 
-          # JSONを安全にパース＆整形して保存
+          echo "===== PARSED JSON ====="
+          printf '%s' "${{ github.event.inputs.agent_definition }}" | jq .
+
           printf '%s' "${{ github.event.inputs.agent_definition }}" \
             | jq . \
             > "$FILE"
