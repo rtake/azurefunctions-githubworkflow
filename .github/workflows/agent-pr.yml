@@ -64,9 +64,10 @@ jobs:
           FILE="$DIRECTORY/${{ github.event.inputs.app_name }}.json"
 
           echo "===== PARSED JSON ====="
-          printf '%s' "${{ github.event.inputs.agent_definition }}" | jq .
+          printf '%s' "${{ github.event.inputs.agent_definition }}" | base64 --decode | jq .
 
           printf '%s' "${{ github.event.inputs.agent_definition }}" \
+            | base64 --decode \
             | jq . \
             > "$FILE"
 
