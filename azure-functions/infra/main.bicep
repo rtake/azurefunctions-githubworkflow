@@ -22,11 +22,91 @@ param githubToken string = ''
 
 var resourceToken = take(toLower(uniqueString(subscription().id, location)), 6)
 
+var aifoundryAccountnameDev = 'aif-${resourceToken}-dev'
+var aifoundryAccountnameProd = 'aif-${resourceToken}-prod'
 var storageName = 'st${resourceToken}'
 var planName = 'plan-${resourceToken}'
 var functionName = 'func-${resourceToken}'
 var appInsightsName = 'appi-${resourceToken}'
 var queueName = 'queue-agentdeploy'
+
+resource aiFoundryAccountDev 'Microsoft.CognitiveServices/accounts@2025-10-01-preview' = {
+  name: aifoundryAccountnameDev
+  location: 'japaneast'
+  sku: {
+    name: 'S0'
+  }
+  kind: 'AIServices'
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    apiProperties: {}
+    customSubDomainName: aifoundryAccountnameDev
+    networkAcls: {
+      defaultAction: 'Allow'
+      virtualNetworkRules: []
+      ipRules: []
+    }
+    allowProjectManagement: true
+    defaultProject: '${aifoundryAccountnameDev}-project'
+    associatedProjects: [
+      '${aifoundryAccountnameDev}-project'
+    ]
+    publicNetworkAccess: 'Enabled'
+    storedCompletionsDisabled: false
+  }
+}
+
+resource aiFoundryAccountDevProject 'Microsoft.CognitiveServices/accounts/projects@2025-10-01-preview' = {
+  parent: aiFoundryAccountDev
+  name: 'dev'
+  location: 'japaneast'
+  kind: 'AIServices'
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {}
+}
+
+resource aiFoundryAccountProd 'Microsoft.CognitiveServices/accounts@2025-10-01-preview' = {
+  name: aifoundryAccountnameProd
+  location: 'japaneast'
+  sku: {
+    name: 'S0'
+  }
+  kind: 'AIServices'
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    apiProperties: {}
+    customSubDomainName: aifoundryAccountnameProd
+    networkAcls: {
+      defaultAction: 'Allow'
+      virtualNetworkRules: []
+      ipRules: []
+    }
+    allowProjectManagement: true
+    defaultProject: '${aifoundryAccountnameProd}-project'
+    associatedProjects: [
+      '${aifoundryAccountnameProd}-project'
+    ]
+    publicNetworkAccess: 'Enabled'
+    storedCompletionsDisabled: false
+  }
+}
+
+resource aiFoundryAccountProdProject 'Microsoft.CognitiveServices/accounts/projects@2025-10-01-preview' = {
+  parent: aiFoundryAccountProd
+  name: 'prod'
+  location: 'japaneast'
+  kind: 'AIServices'
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {}
+}
 
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageName
@@ -78,17 +158,13 @@ resource alertRule 'microsoft.insights/activityLogAlerts@2017-04-01' = {
     description: 'Alert for function failures'
     enabled: true
     scopes: [
-      subscription().id
+      aiFoundryAccountDev.id
     ]
     condition: {
       allOf: [
         {
           field: 'category'
           equals: 'Administrative'
-        }
-        {
-          field: 'resourceType'
-          equals: 'Microsoft.CognitiveServices'
         }
       ]
     }
