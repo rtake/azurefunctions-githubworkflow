@@ -1,0 +1,59 @@
+name: Deploy Agents
+
+on:
+  push:
+    branches:
+      - develop
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  PROJECT_ENDPOINT: ${{ secrets.AIFOUNDRY_PROJECT_ENDPOINT }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Detect changed agents
+        id: changes
+        run: |
+          CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^agents/.*\.json$' || true)
+          echo "files=$CHANGED" >> $GITHUB_OUTPUT
+
+      - name: Get Foundry token
+        id: token
+        run: |
+          TOKEN=$(az account get-access-token \
+            --resource https://cognitiveservices.azure.com \
+            --query accessToken -o tsv)
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Deploy changed agents
+        if: steps.changes.outputs.files != ''
+        run: |
+          for f in ${{ steps.changes.outputs.files }}; do
+            AGENT_NAME=$(basename $f .json)
+
+            echo "Deploying $AGENT_NAME"
+
+            curl -X POST \
+              "$PROJECT_ENDPOINT/agents/$AGENT_NAME?api-version=v1" \
+              -H "Authorization: Bearer ${{ steps.token.outputs.token }}" \
+              -H "Content-Type: application/json" \
+              --data-binary @"$f"
+
+          done
