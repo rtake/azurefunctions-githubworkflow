@@ -1,4 +1,4 @@
-# azurefunctions-githubworkflow
+# azure-agentservice-cicd
 
 ## 概要
 
@@ -157,8 +157,11 @@ bash trigger.sh
 
 ## 設計上のポイント
 
-### Azure Functions
+- アクティビティログの解析処理と、GitHub Actionsを起動してPull Requestを作成する処理を分離し、責務を明確にしました。
+- GitHub Actions側はworkflow_dispatchで起動する構成とし、Azure FunctionsにGitHubのシークレットを持たせないことで、認証情報の管理範囲を最小化しました。
+- 開発環境での変更はPull Requestとして可視化し、レビュー・マージを経たものだけが本番環境に反映されるようにすることで、GitOpsとしての統制を担保しました。
+- 本番環境への反映はmainへのマージをトリガーとして実行し、Gitの状態と本番環境の状態を一致させる構成にしています。
 
-- アクティビティログをパースする関数とGitHubにエージェントをアップロードする関数を分離し、Queueで統合する構成としました
-- Azure FunctionsでエージェントをGitHubにアップロードする際には、Azure Functionsにシークレットを持たせないようにするため、手動起動できるworkflow_dispatchイベントを定義し、その中でブランチ作成からPR作成までを一貫して実行するようにしました
-- xxx
+##　今後の改善ポイント
+
+- Parse Log Functionの呼び出し元をSecure webhookに限定し、アクショングループからのみ呼び出せるようにする。
