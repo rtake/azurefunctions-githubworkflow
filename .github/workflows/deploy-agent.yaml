@@ -38,7 +38,7 @@ jobs:
         id: token
         run: |
           TOKEN=$(az account get-access-token \
-            --resource https://cognitiveservices.azure.com \
+            --resource https://ai.azure.com \
             --query accessToken -o tsv)
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
