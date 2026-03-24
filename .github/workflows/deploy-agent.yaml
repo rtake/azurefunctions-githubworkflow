@@ -50,10 +50,18 @@ jobs:
 
             echo "Deploying $AGENT_NAME"
 
+            BODY=$(jq -n \
+              --arg name "$AGENT_NAME" \
+              --slurpfile def "$f" \
+             '{
+              "name": $name,
+              "definition": $def[0]
+              }')
+
             curl -X POST \
               "$PROJECT_ENDPOINT/agents/$AGENT_NAME?api-version=v1" \
               -H "Authorization: Bearer ${{ steps.token.outputs.token }}" \
               -H "Content-Type: application/json" \
-              --data-binary @"$f"
+              -d "$BODY"
 
           done
