@@ -45,6 +45,8 @@ jobs:
       - name: Deploy changed agents
         if: steps.changes.outputs.files != ''
         run: |
+          set -euo pipefail
+
           for f in ${{ steps.changes.outputs.files }}; do
             AGENT_NAME=$(basename $f .json)
 
@@ -57,8 +59,9 @@ jobs:
               "name": $name,
               "definition": $def[0]
               }')
-
-            curl -X POST \
+            
+            curl --fail-with-body --silent --show-error \
+              -X POST \
               "$PROJECT_ENDPOINT/agents/$AGENT_NAME?api-version=v1" \
               -H "Authorization: Bearer ${{ steps.token.outputs.token }}" \
               -H "Content-Type: application/json" \
