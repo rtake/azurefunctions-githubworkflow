@@ -11,7 +11,6 @@ permissions:
 
 env:
   AIFOUNDRY_ACCOUNT_NAME: ${{ vars.AIFOUNDRY_ACCOUNT_NAME }}
-  AIFOUNDRY_PROJECT_NAME: ${{ vars.AIFOUNDRY_PROJECT_NAME }}
 
 jobs:
   deploy:
@@ -48,23 +47,34 @@ jobs:
             --query accessToken -o tsv)
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
 
-      # ToDo: プロジェクト・エージェント未作成の場合は作成する
-
       - name: Deploy changed agents
         if: steps.changes.outputs.files != ''
+        env:
+          TOKEN: ${{ steps.token.outputs.token }}
         run: |
           set -euo pipefail
 
           FILES="${{ steps.changes.outputs.files }}"
+          BASE_URL="https://${AIFOUNDRY_ACCOUNT_NAME}.services.ai.azure.com"
 
           while IFS= read -r f; do
             [ -z "$f" ] && continue
 
             AGENT_NAME=$(basename "$f" .json)
             PROJECT_NAME=$(echo "$f" | awk -F'/' '{print $(NF-1)}')
-            echo "Deploying ${PROJECT_NAME}/${AGENT_NAME}"
 
-            BODY=$(jq -n \
+            echo "Processing ${PROJECT_NAME}/${AGENT_NAME}"
+
+            GET_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1"
+            CREATE_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents?api-version=v1"
+            UPDATE_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1"
+
+            # 存在確認
+            STATUS=$(curl -s -o /tmp/agent.json -w "%{http_code}" \
+              -H "Authorization: Bearer ${TOKEN}" \
+              "$GET_URL" || true)
+
+            CREATE_BODY=$(jq -n \
               --arg name "$AGENT_NAME" \
               --slurpfile def "$f" \
               '{
@@ -72,10 +82,36 @@ jobs:
                 definition: $def[0]
               }')
 
-            curl --fail-with-body --silent --show-error \
-              -X POST \
-              "https://${{ env.AIFOUNDRY_ACCOUNT_NAME }}.services.ai.azure.com/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1" \
-              -H "Authorization: Bearer ${{ steps.token.outputs.token }}" \
-              -H "Content-Type: application/json" \
-              -d "$BODY"
+            UPDATE_BODY=$(jq -n \
+              --slurpfile def "$f" \
+              '{
+                definition: $def[0]
+              }')
+
+            if [ "$STATUS" = "404" ]; then
+              echo "Creating agent ${PROJECT_NAME}/${AGENT_NAME}"
+
+              curl --fail-with-body --silent --show-error \
+                -X POST \
+                "$CREATE_URL" \
+                -H "Authorization: Bearer ${TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "$CREATE_BODY"
+
+            elif [ "$STATUS" = "200" ]; then
+              echo "Updating agent ${PROJECT_NAME}/${AGENT_NAME}"
+
+              curl --fail-with-body --silent --show-error \
+                -X POST \
+                "$UPDATE_URL" \
+                -H "Authorization: Bearer ${TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "$UPDATE_BODY"
+
+            else
+              echo "Unexpected status code: $STATUS"
+              cat /tmp/agent.json || true
+              exit 1
+            fi
+
           done <<< "$FILES"
