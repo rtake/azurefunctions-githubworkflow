@@ -49,5 +49,5 @@ __azurite_db*__.json
 
 *.bicepparam
 
-.env
+.azure
 .DS_store

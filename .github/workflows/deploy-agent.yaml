@@ -108,7 +108,8 @@ jobs:
                 "$CREATE_URL" \
                 -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
                 -H "Content-Type: application/json" \
-                -d "$CREATE_BODY"
+                -d "$CREATE_BODY" \
+                -o "$AGENT_JSON"
 
             elif [ "$STATUS" = "200" ]; then
               echo "Updating agent ${PROJECT_NAME}/${AGENT_NAME}"
@@ -118,7 +119,8 @@ jobs:
                 "$UPDATE_URL" \
                 -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
                 -H "Content-Type: application/json" \
-                -d "$UPDATE_BODY"
+                -d "$UPDATE_BODY" \
+                -o "$AGENT_JSON"
 
             else
               echo "Unexpected status code: $STATUS"
@@ -140,17 +142,19 @@ jobs:
 
             APP_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}?api-version=${API_VERSION}"
             DEPLOY_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}/agentDeployments/${DEPLOYMENT_NAME}?api-version=${API_VERSION}"
+            APP_JSON=$(mktemp)
+            DEPLOY_JSON=$(mktemp)
 
             APP_BODY=$(jq -n \
               --arg displayName "$AGENT_NAME" \
               --arg description "Published agent application for ${AGENT_NAME}" \
+              --slurpfile agent "$AGENT_JSON" \
               '{
                 properties: {
                   agents: [
                     {
-                      agentId: $agentId,
-                      agentName: $agentName,
-                      agentVersion: $agentVersion
+                      agentId: $agent[0].id,
+                      agentName: $agent[0].name,
                     }
                   ],
                   displayName: $displayName,
@@ -158,44 +162,132 @@ jobs:
                 }
               }')
 
-            # curl --fail-with-body --silent --show-error \
-            #   -X PUT \
-            #   "$APP_URL" \
-            #   -H "Authorization: Bearer ${ARM_TOKEN}" \
-            #   -H "Content-Type: application/json" \
-            #   -d "$APP_BODY"
+            curl --fail-with-body --silent --show-error \
+              -X PUT \
+              "$APP_URL" \
+              -H "Authorization: Bearer ${ARM_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$APP_BODY" \
+              -o "$APP_JSON"
 
-            echo $APP_BODY
+            APP_AGENT_ID=$(jq -r '.properties.agents[0].agentId' "$APP_JSON")
+            APP_AGENT_NAME=$(jq -r '.properties.agents[0].agentName' "$APP_JSON")
+            APP_DEPLOYMENT_ID=$(jq -r '.properties.trafficRoutingPolicy.rules[0].deploymentId // empty' "$APP_JSON")
+
+            if [ -z "$APP_AGENT_ID" ] || [ "$APP_AGENT_ID" = "null" ] || \
+               [ "$APP_AGENT_NAME" != "$AGENT_NAME" ]; then
+              echo "Application API response does not contain the expected agent for ${AGENT_NAME}"
+              cat "$APP_JSON" || true
+              exit 1
+            fi
 
             echo "Deploying agent ${AGENT_NAME} with version ${AGENT_VERSION}"
 
-            DEPLOY_BODY=$(jq -n \
-              --arg agentId "$AGENT_ID" \
-              --arg agentName "$AGENT_NAME" \
-              --arg agentVersion "$AGENT_VERSION" \
-              --arg displayName "${AGENT_NAME} deployment" \
+            DEPLOY_STATUS=$(curl -s -o "$DEPLOY_JSON" -w "%{http_code}" \
+              -H "Authorization: Bearer ${ARM_TOKEN}" \
+              "$DEPLOY_URL" || true)
+
+            if [ "$DEPLOY_STATUS" = "200" ]; then
+              DEPLOY_BODY=$(jq -n \
+                --slurpfile app "$APP_JSON" \
+                --slurpfile deploy "$DEPLOY_JSON" \
+                --arg agentVersion "$AGENT_VERSION" \
+                '{
+                  properties:
+                    ($deploy[0].properties + {
+                      agents: [
+                        {
+                          agentId: $app[0].properties.agents[0].agentId,
+                          agentName: $app[0].properties.agents[0].agentName,
+                          agentVersion: $agentVersion
+                        }
+                      ]
+                    })
+                }')
+            else
+              DEPLOY_BODY=$(jq -n \
+                --slurpfile app "$APP_JSON" \
+                --arg agentVersion "$AGENT_VERSION" \
+                --arg deploymentId "$APP_DEPLOYMENT_ID" \
+                --arg description "Published deployment for ${AGENT_NAME}" \
+                --arg displayName "${AGENT_NAME} deployment" \
+                '{
+                  properties: {
+                    agents: [
+                      {
+                        agentId: $app[0].properties.agents[0].agentId,
+                        agentName: $app[0].properties.agents[0].agentName,
+                        agentVersion: $agentVersion
+                      }
+                    ],
+                    deploymentId: $deploymentId,
+                    deploymentType: "Managed",
+                    description: $description,
+                    displayName: $displayName,
+                    state: "Starting",
+                    protocols: [
+                      {
+                        version: "1.0",
+                        protocol: "Responses"
+                      }
+                    ]
+                  }
+                }')
+            fi
+
+            echo "Deploy body: $DEPLOY_BODY"
+
+            curl --fail-with-body --silent --show-error \
+              -X PUT \
+              "$DEPLOY_URL" \
+              -H "Authorization: Bearer ${ARM_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$DEPLOY_BODY" \
+              -o "$DEPLOY_JSON"
+
+            TARGET_DEPLOYMENT_ID=$(jq -r '.properties.deploymentId // empty' "$DEPLOY_JSON")
+
+            if [ -z "$TARGET_DEPLOYMENT_ID" ]; then
+              echo "Deployment API response does not contain deploymentId for ${AGENT_NAME}"
+              cat "$DEPLOY_JSON" || true
+              exit 1
+            fi
+
+            APP_GET_STATUS=$(curl -s -o "$APP_JSON" -w "%{http_code}" \
+              -H "Authorization: Bearer ${ARM_TOKEN}" \
+              "$APP_URL")
+
+            if [ "$APP_GET_STATUS" != "200" ]; then
+              echo "Failed to refresh application before routing update: ${AGENT_NAME}"
+              cat "$APP_JSON" || true
+              exit 1
+            fi
+
+            APP_ROUTE_BODY=$(jq -n \
+              --slurpfile app "$APP_JSON" \
+              --arg deploymentId "$TARGET_DEPLOYMENT_ID" \
               '{
-                properties: {
-                  agents: [
-                    {
-                      agentId: $agentId,
-                      agentName: $agentName,
-                      agentVersion: $agentVersion
-                    }
-                  ],
-                  deploymentType: "Managed",
-                  displayName: $displayName,
-                  protocols: [
-                    {
-                      protocol: "Agent",
-                      version: "1.0"
-                    }
-                  ],
-                  state: "Starting"
-                }
+                properties:
+                  ($app[0].properties
+                    | .trafficRoutingPolicy.protocol = (.trafficRoutingPolicy.protocol // "FixedRatio")
+                    | .trafficRoutingPolicy.rules = (
+                        if (.trafficRoutingPolicy.rules // [] | any(.ruleId == "default")) then
+                          (.trafficRoutingPolicy.rules
+                            | map(if .ruleId == "default" then . + { deploymentId: $deploymentId } else . end))
+                        else
+                          ((.trafficRoutingPolicy.rules // []) + [
+                            {
+                              ruleId: "default",
+                              description: "Default rule routing all traffic to the latest deployment",
+                              deploymentId: $deploymentId,
+                              trafficPercentage: 100
+                            }
+                          ])
+                        end
+                      ))
               }')
 
-            echo "Deployment body: $DEPLOY_BODY"
+            echo "Updating application routing for ${AGENT_NAME} to deploymentId ${TARGET_DEPLOYMENT_ID}"
 
             curl --fail-with-body --silent --show-error \
               -X PUT \
