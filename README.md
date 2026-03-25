@@ -206,6 +206,8 @@ GitHub上でワークフローが起動し、PR作成が確認できたら成功
 
 ## 今後の改善点
 
+- バグ修正
+  - https://github.com/rtake/azure-agentservice-gitops/actions/runs/23555004171/job/68579222290
 - Bicepでモデルをデプロイできるようにする
   - 本番環境でモデルがデプロイされていない場合にはデプロイする
 - Azure Functionsの環境変数の値をKey Vault等から安全に参照できるようにする(現在の構成ではデプロイのたびに更新が必要になってしまう)

@@ -107,7 +107,8 @@ jobs:
                 "$CREATE_URL" \
                 -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
                 -H "Content-Type: application/json" \
-                -d "$CREATE_BODY"
+                -d "$CREATE_BODY" \
+                -o "$AGENT_JSON"
 
             elif [ "$STATUS" = "200" ]; then
               echo "Updating agent ${PROJECT_NAME}/${AGENT_NAME}"
@@ -117,7 +118,8 @@ jobs:
                 "$UPDATE_URL" \
                 -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
                 -H "Content-Type: application/json" \
-                -d "$UPDATE_BODY"
+                -d "$UPDATE_BODY" \
+                -o "$AGENT_JSON"
 
             else
               echo "Unexpected status code: $STATUS"
@@ -197,11 +199,61 @@ jobs:
 
             echo "Deployment body: $DEPLOY_BODY"
 
+            DEPLOY_JSON=$(mktemp)
+
             curl --fail-with-body --silent --show-error \
               -X PUT \
               "$DEPLOY_URL" \
               -H "Authorization: Bearer ${ARM_TOKEN}" \
               -H "Content-Type: application/json" \
-              -d "$DEPLOY_BODY"
+              -d "$DEPLOY_BODY" \
+              -o "$DEPLOY_JSON"
+
+            DEPLOYMENT_ID=$(jq -r '.id' "$DEPLOY_JSON")
+            if [ -z "$DEPLOYMENT_ID" ] || [ "$DEPLOYMENT_ID" = "null" ]; then
+              DEPLOYMENT_ID="/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}/agentDeployments/${DEPLOYMENT_NAME}"
+            fi
+
+            APP_LINK_BODY=$(jq -n \
+              --arg displayName "$AGENT_NAME" \
+              --arg description "Published agent application for ${AGENT_NAME}" \
+              --arg agentId "$AGENT_ID" \
+              --arg agentName "$AGENT_NAME" \
+              --arg deploymentId "$DEPLOYMENT_ID" \
+              '{
+                properties: {
+                  agents: [
+                    {
+                      agentId: $agentId,
+                      agentName: $agentName
+                    }
+                  ],
+                  displayName: $displayName,
+                  description: $description,
+                  authorizationPolicy: {
+                    authorizationScheme: "Default"
+                  },
+                  trafficRoutingPolicy: {
+                    protocol: "FixedRatio",
+                    rules: [
+                      {
+                        ruleId: "default",
+                        description: "Default rule routing all traffic to the first deployment",
+                        deploymentId: $deploymentId,
+                        trafficPercentage: 100
+                      }
+                    ]
+                  }
+                }
+              }')
+
+            echo "Linking deployment ${DEPLOYMENT_ID} to application ${APP_NAME}"
+
+            curl --fail-with-body --silent --show-error \
+              -X PUT \
+              "$APP_URL" \
+              -H "Authorization: Bearer ${ARM_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$APP_LINK_BODY"
 
           done <<< "$FILES"
