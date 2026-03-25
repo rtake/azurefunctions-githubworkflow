@@ -197,11 +197,11 @@ jobs:
 
             echo "Deployment body: $DEPLOY_BODY"
 
-            # curl --fail-with-body --silent --show-error \
-            #   -X PUT \
-            #   "$DEPLOY_URL" \
-            #   -H "Authorization: Bearer ${ARM_TOKEN}" \
-            #   -H "Content-Type: application/json" \
-            #   -d "$DEPLOY_BODY"
+            curl --fail-with-body --silent --show-error \
+              -X PUT \
+              "$DEPLOY_URL" \
+              -H "Authorization: Bearer ${ARM_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$DEPLOY_BODY"
 
           done <<< "$FILES"
