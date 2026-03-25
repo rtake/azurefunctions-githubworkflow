@@ -143,6 +143,7 @@ jobs:
             APP_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}?api-version=${API_VERSION}"
             DEPLOY_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}/agentDeployments/${DEPLOYMENT_NAME}?api-version=${API_VERSION}"
             APP_JSON=$(mktemp)
+            DEPLOY_JSON=$(mktemp)
 
             APP_BODY=$(jq -n \
               --arg displayName "$AGENT_NAME" \
@@ -204,28 +205,51 @@ jobs:
 
             echo "Deploying agent ${AGENT_NAME} with version ${AGENT_VERSION}"
 
-            DEPLOY_BODY=$(jq -n \
-              --slurpfile app "$APP_JSON" \
-              --arg agentVersion "$AGENT_VERSION" \
-              --arg deploymentId "$APP_DEPLOYMENT_ID" \
-              --arg description "Published deployment for ${AGENT_NAME}" \
-              --arg displayName "${AGENT_NAME} deployment" \
-              '{
-                properties: {
-                  agents: [
-                    {
-                      agentId: $app[0].properties.agents[0].agentId,
-                      agentName: $app[0].properties.agents[0].agentName,
-                      agentVersion: $agentVersion
-                    }
-                  ],
-                  deploymentId: $deploymentId,
-                  deploymentType: "Managed",
-                  description: $description,
-                  displayName: $displayName,
-                  state: "Starting"
-                }
-              }')
+            DEPLOY_STATUS=$(curl -s -o "$DEPLOY_JSON" -w "%{http_code}" \
+              -H "Authorization: Bearer ${ARM_TOKEN}" \
+              "$DEPLOY_URL" || true)
+
+            if [ "$DEPLOY_STATUS" = "200" ]; then
+              DEPLOY_BODY=$(jq -n \
+                --slurpfile app "$APP_JSON" \
+                --slurpfile deploy "$DEPLOY_JSON" \
+                --arg agentVersion "$AGENT_VERSION" \
+                '{
+                  properties:
+                    ($deploy[0].properties + {
+                      agents: [
+                        {
+                          agentId: $app[0].properties.agents[0].agentId,
+                          agentName: $app[0].properties.agents[0].agentName,
+                          agentVersion: $agentVersion
+                        }
+                      ]
+                    })
+                }')
+            else
+              DEPLOY_BODY=$(jq -n \
+                --slurpfile app "$APP_JSON" \
+                --arg agentVersion "$AGENT_VERSION" \
+                --arg deploymentId "$APP_DEPLOYMENT_ID" \
+                --arg description "Published deployment for ${AGENT_NAME}" \
+                --arg displayName "${AGENT_NAME} deployment" \
+                '{
+                  properties: {
+                    agents: [
+                      {
+                        agentId: $app[0].properties.agents[0].agentId,
+                        agentName: $app[0].properties.agents[0].agentName,
+                        agentVersion: $agentVersion
+                      }
+                    ],
+                    deploymentId: $deploymentId,
+                    deploymentType: "Managed",
+                    description: $description,
+                    displayName: $displayName,
+                    state: "Starting"
+                  }
+                }')
+            fi
 
             echo "Deploy body: $DEPLOY_BODY"
 
