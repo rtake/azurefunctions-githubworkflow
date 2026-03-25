@@ -61,7 +61,7 @@ jobs:
             [ -z "$f" ] && continue
 
             AGENT_NAME=$(basename "$f" .json)
-            PROJECT_NAME=$(echo "$f" | awk -F'/' '{print $(NF-2)}')
+            PROJECT_NAME=$(echo "$f" | awk -F'/' '{print $(NF-3)}')
             echo "Deploying ${PROJECT_NAME}/${AGENT_NAME}"
 
             BODY=$(jq -n \
