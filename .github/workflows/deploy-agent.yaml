@@ -146,7 +146,6 @@ jobs:
               --arg description "Published agent application for ${AGENT_NAME}" \
               --arg agentId "$AGENT_ID" \
               --arg agentName "$AGENT_NAME" \
-              --arg agentVersion "$AGENT_VERSION" \
               '{
                 properties: {
                   agents: [
@@ -180,7 +179,7 @@ jobs:
                     {
                       agentId: $agentId,
                       agentName: $agentName,
-                      agentVersion: $agentVersion
+                      agentVersion: "latest"
                     }
                   ],
                   deploymentType: "Managed",
