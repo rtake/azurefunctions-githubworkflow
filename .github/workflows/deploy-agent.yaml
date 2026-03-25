@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feature/*
 
 permissions:
   id-token: write
@@ -151,12 +152,14 @@ jobs:
                 }
               }')
 
-            curl --fail-with-body --silent --show-error \
-              -X PUT \
-              "$APP_URL" \
-              -H "Authorization: Bearer ${ARM_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d "$APP_BODY"
+            # curl --fail-with-body --silent --show-error \
+            #   -X PUT \
+            #   "$APP_URL" \
+            #   -H "Authorization: Bearer ${ARM_TOKEN}" \
+            #   -H "Content-Type: application/json" \
+            #   -d "$APP_BODY"
+
+            echo $APP_BODY
 
             echo "Deploying agent ${AGENT_NAME} with version ${AGENT_VERSION}"
 
@@ -186,11 +189,13 @@ jobs:
                 }
               }')
 
-            curl --fail-with-body --silent --show-error \
-              -X PUT \
-              "$DEPLOY_URL" \
-              -H "Authorization: Bearer ${ARM_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d "$DEPLOY_BODY"
+            echo "Deployment body: $DEPLOY_BODY"
+
+            # curl --fail-with-body --silent --show-error \
+            #   -X PUT \
+            #   "$DEPLOY_URL" \
+            #   -H "Authorization: Bearer ${ARM_TOKEN}" \
+            #   -H "Content-Type: application/json" \
+            #   -d "$DEPLOY_BODY"
 
           done <<< "$FILES"
