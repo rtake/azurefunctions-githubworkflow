@@ -65,7 +65,7 @@ jobs:
           FOUNDRY_TOKEN: ${{ steps.foundry_token.outputs.token }}
           ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
           FILES: ${{ steps.changes.outputs.files }}
-          BASE_URL: "https://${AIFOUNDRY_ACCOUNT_NAME}.services.ai.azure.com"
+          BASE_URL: https://${AIFOUNDRY_ACCOUNT_NAME}.services.ai.azure.com
         run: |
           set -euo pipefail
 
