@@ -246,7 +246,13 @@ jobs:
                     deploymentType: "Managed",
                     description: $description,
                     displayName: $displayName,
-                    state: "Starting"
+                    state: "Starting",
+                    protocols: [
+                      {
+                        version: "1.0",
+                        protocol: "Responses"
+                      }
+                    ]
                   }
                 }')
             fi
