@@ -65,7 +65,6 @@ jobs:
           FOUNDRY_TOKEN: ${{ steps.foundry_token.outputs.token }}
           ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
           FILES: ${{ steps.changes.outputs.files }}
-          BASE_URL: https://${AIFOUNDRY_ACCOUNT_NAME}.services.ai.azure.com
         run: |
           set -euo pipefail
 
@@ -73,6 +72,7 @@ jobs:
             [ -z "$f" ] && continue
 
             AGENT_NAME=$(basename "$f" .json)
+            BASE_URL="https://${AIFOUNDRY_ACCOUNT_NAME}.services.ai.azure.com"
 
             GET_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1"
 
