@@ -19,7 +19,6 @@ resource application 'Microsoft.CognitiveServices/accounts/projects/applications
   name: agentName
   properties: {
     displayName: agentName
-    authorizationPolicy: {}
     agents: [
       {
         agentId: agentId
