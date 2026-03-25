@@ -19,6 +19,14 @@
 
 ![](/docs/system-architecture.png)
 
+AI Foundryはリソース(アカウント)単位で分離し、GitHub上で同じエージェント名で管理します。
+開発環境のエージェント定義やプロジェクト構造は `/agents/projects` 以下に反映されます。ファイルの命名規則は `/agents/projects/{PROJECT_NAME}/{AGENT_NAME}.json` です。
+
+mainブランチにマージされたエージェントは、本番環境のAI Founsryアカウントの `prod` プロジェクトで作成・発行されます。
+デプロイ先のプロジェクト名を変更したい場合は [deploy-agent.yaml](/.github/workflows/deploy-agent.yaml) の `PROJECT_NAME` を変更してください。その際、AI Foundry側にも同じ名前のプロジェクトが作成されていることを確認してください。
+
+開発環境のエージェント名が本番環境にそのまま対応するため、本番用のAI Foundryに該当のエージェントが存在しない場合にはワークフロー ([deploy-agent.yaml](/.github/workflows/deploy-agent.yaml)) の中で作成します。
+
 ### 処理フロー
 
 1. 開発環境のAI Foundryでエージェントを発行する
@@ -159,18 +167,21 @@ Azure Functionsの環境変数に以下の値を設定します。
 作成したサービスプリンシパル(Azure管理画面上ではエンタープライズアプリケーションとして扱われます)に、本番用AI Foundryに対する `Azure AI User` ロールを割り当ててください。
 ![](/docs/role-assignment.png)
 
-#### 環境変数の設定
+#### リポジトリのシークレットと変数の設定
 
-リポジトリのSecretに以下の変数を設定してください。
+リポジトリのシークレットに以下の変数を設定してください。
 
-| 変数名                     | 概要                                                                                                                    |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| AZURE_SUBSCRIPTION_ID      | 操作対象のAI Foundryが含まれているサブスクリプションのID                                                                |
-| AIFOUNDRY_PROJECT_ENDPOINT | AI Foundryのエンドポイント (例: `https://{ai-services-account-name}.services.ai.azure.com/api/projects/{project-name}`) |
-| AZURE_TENANT_ID            | GitHub Actions用のエンタープライズアプリケーションが含まれているテナントのID                                            |
-| AZURE_CLIENT_ID            | GitHub Actions用のエンタープライズアプリケーションのID                                                                  |
+| 変数名                | 概要                                                                         |
+| --------------------- | ---------------------------------------------------------------------------- |
+| AZURE_SUBSCRIPTION_ID | 操作対象のAI Foundryが含まれているサブスクリプションのID                     |
+| AZURE_TENANT_ID       | GitHub Actions用のエンタープライズアプリケーションが含まれているテナントのID |
+| AZURE_CLIENT_ID       | GitHub Actions用のエンタープライズアプリケーションのID                       |
 
-![](/docs/github-secrets.png)
+リポジトリの構成変数に、mainへのマージ時にエージェントをデプロイする(=本番用の)AI Foundryのアカウント名を設定してください。
+
+| 変数名                 | 概要                     |
+| ---------------------- | ------------------------ |
+| AIFOUNDRY_ACCOUNT_NAME | AI Foundryのアカウント名 |
 
 ## テスト
 
@@ -197,16 +208,16 @@ GitHub上でワークフローが起動し、PR作成が確認できたら成功
 
 ### 優先度高
 
-- ワークフローからデプロイしたエージェントをFoundryポータルから開くと、変更内容がない時にも「保存してください」というメッセージが出る
 - エージェント未作成の場合に作成できるようワークフローを修正する
+- ワークフローからデプロイしたエージェントをFoundryポータルから開くと、変更内容がない時にも「保存してください」というメッセージが出る
+  - エージェントを保存するAPIを実行してからPublishする
 
 ### 優先度中
 
-- サービスプリンシパルをIaC(Bicep)に追加する
 - Azure Functionsの環境変数の値をKey Vault等から安全に参照できるようにする(現在の構成ではデプロイのたびに更新が必要になってしまう)
-- 本番デプロイ先を明示できるようにする(現在の構成では `AIFOUNDRY_PROJECT_ENDPOINT` からしか参照できない)
 
 ### 優先度低
 
+- サービスプリンシパルをIaC(Bicep)に追加する
 - Parse Log Functionの呼び出し元をSecure webhookに限定し、アクショングループからのみ呼び出せるようにする ([セキュア Webhook アクション グループを作成する](https://learn.microsoft.com/ja-jp/azure/azure-monitor/alerts/itsm-connector-secure-webhook-connections-azure-configuration#create-a-secure-webhook-action-group))
 - ネットワーク閉域化
