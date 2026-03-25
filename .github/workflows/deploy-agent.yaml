@@ -142,6 +142,7 @@ jobs:
 
             APP_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}?api-version=${API_VERSION}"
             DEPLOY_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}/agentDeployments/${DEPLOYMENT_NAME}?api-version=${API_VERSION}"
+            APP_JSON=$(mktemp)
 
             APP_BODY=$(jq -n \
               --arg displayName "$AGENT_NAME" \
@@ -165,7 +166,36 @@ jobs:
               "$APP_URL" \
               -H "Authorization: Bearer ${ARM_TOKEN}" \
               -H "Content-Type: application/json" \
-              -d "$APP_BODY"
+              -d "$APP_BODY" \
+              -o "$APP_JSON"
+
+            APP_AGENT_ID=$(jq -r '.properties.agents[0].agentId' "$APP_JSON")
+            APP_AGENT_NAME=$(jq -r '.properties.agents[0].agentName' "$APP_JSON")
+
+            if [ "$APP_AGENT_ID" != "$AGENT_ID" ] || [ "$APP_AGENT_NAME" != "$AGENT_NAME" ]; then
+              echo "Application API response does not match created agent for ${AGENT_NAME}"
+              cat "$APP_JSON" || true
+              exit 1
+            fi
+
+            for i in 1 2 3 4 5; do
+              APP_GET_STATUS=$(curl -s -o "$APP_JSON" -w "%{http_code}" \
+                -H "Authorization: Bearer ${ARM_TOKEN}" \
+                "$APP_URL")
+
+              if [ "$APP_GET_STATUS" = "200" ] && \
+                 [ "$(jq -r '.properties.agents[0].agentId // empty' "$APP_JSON")" = "$AGENT_ID" ]; then
+                break
+              fi
+
+              if [ "$i" = "5" ]; then
+                echo "Application was not ready for deployment: ${AGENT_NAME}"
+                cat "$APP_JSON" || true
+                exit 1
+              fi
+
+              sleep 5
+            done
 
             echo "Deploying agent ${AGENT_NAME} with version ${AGENT_VERSION}"
 
