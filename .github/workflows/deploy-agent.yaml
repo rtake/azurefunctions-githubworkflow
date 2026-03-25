@@ -146,6 +146,13 @@ jobs:
               --arg description "Published agent application for ${AGENT_NAME}" \
               '{
                 properties: {
+                  agents: [
+                    {
+                      agentId: $agentId,
+                      agentName: $agentName,
+                      agentVersion: $agentVersion
+                    }
+                  ],
                   displayName: $displayName,
                   description: $description
                 }
