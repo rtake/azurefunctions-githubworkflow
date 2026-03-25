@@ -144,6 +144,9 @@ jobs:
             APP_BODY=$(jq -n \
               --arg displayName "$AGENT_NAME" \
               --arg description "Published agent application for ${AGENT_NAME}" \
+              --arg agentId "$AGENT_ID" \
+              --arg agentName "$AGENT_NAME" \
+              --arg agentVersion "$AGENT_VERSION" \
               '{
                 properties: {
                   agents: [
