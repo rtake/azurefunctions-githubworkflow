@@ -80,16 +80,28 @@ jobs:
             CREATE_BODY=$(jq -n \
               --arg name "$AGENT_NAME" \
               --slurpfile def "$f" \
-              '{
-                name: $name,
-                definition: $def[0]
-              }')
+              '($def[0] + {name: $name})
+              | {
+                  name,
+                  model,
+                  description,
+                  instructions,
+                  tools: (.tools // []),
+                  metadata: (.metadata // {})
+                }')
 
             UPDATE_BODY=$(jq -n \
+              --arg name "$AGENT_NAME" \
               --slurpfile def "$f" \
-              '{
-                definition: $def[0]
-              }')
+              '($def[0] + {name: $name})
+              | {
+                  name,
+                  model,
+                  description,
+                  instructions,
+                  tools: (.tools // []),
+                  metadata: (.metadata // {})
+                }')
 
             if [ "$STATUS" = "404" ]; then
               echo "Creating agent ${PROJECT_NAME}/${AGENT_NAME}"
