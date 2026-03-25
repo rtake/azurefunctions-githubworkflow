@@ -172,8 +172,9 @@ jobs:
             APP_AGENT_ID=$(jq -r '.properties.agents[0].agentId' "$APP_JSON")
             APP_AGENT_NAME=$(jq -r '.properties.agents[0].agentName' "$APP_JSON")
 
-            if [ "$APP_AGENT_ID" != "$AGENT_ID" ] || [ "$APP_AGENT_NAME" != "$AGENT_NAME" ]; then
-              echo "Application API response does not match created agent for ${AGENT_NAME}"
+            if [ -z "$APP_AGENT_ID" ] || [ "$APP_AGENT_ID" = "null" ] || \
+               [ "$APP_AGENT_NAME" != "$AGENT_NAME" ]; then
+              echo "Application API response does not contain the expected agent for ${AGENT_NAME}"
               cat "$APP_JSON" || true
               exit 1
             fi
@@ -184,7 +185,8 @@ jobs:
                 "$APP_URL")
 
               if [ "$APP_GET_STATUS" = "200" ] && \
-                 [ "$(jq -r '.properties.agents[0].agentId // empty' "$APP_JSON")" = "$AGENT_ID" ]; then
+                 [ "$(jq -r '.properties.agents[0].agentName // empty' "$APP_JSON")" = "$AGENT_NAME" ] && \
+                 [ -n "$(jq -r '.properties.agents[0].agentId // empty' "$APP_JSON")" ]; then
                 break
               fi
 
@@ -200,15 +202,16 @@ jobs:
             echo "Deploying agent ${AGENT_NAME} with version ${AGENT_VERSION}"
 
             DEPLOY_BODY=$(jq -n \
-              --slurpfile agent "$AGENT_JSON" \
+              --slurpfile app "$APP_JSON" \
+              --arg agentVersion "$AGENT_VERSION" \
               --arg displayName "${AGENT_NAME} deployment" \
               '{
                 properties: {
                   agents: [
                     {
-                      agentId: $agent[0].id,
-                      agentName: $agent[0].name,
-                      agentVersion: $agent[0].versions.latest.version
+                      agentId: $app[0].properties.agents[0].agentId,
+                      agentName: $app[0].properties.agents[0].agentName,
+                      agentVersion: $agentVersion
                     }
                   ],
                   deploymentType: "Managed",
