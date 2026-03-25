@@ -108,7 +108,8 @@ jobs:
                 "$CREATE_URL" \
                 -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
                 -H "Content-Type: application/json" \
-                -d "$CREATE_BODY"
+                -d "$CREATE_BODY" \
+                -o "$AGENT_JSON"
 
             elif [ "$STATUS" = "200" ]; then
               echo "Updating agent ${PROJECT_NAME}/${AGENT_NAME}"
@@ -118,7 +119,8 @@ jobs:
                 "$UPDATE_URL" \
                 -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
                 -H "Content-Type: application/json" \
-                -d "$UPDATE_BODY"
+                -d "$UPDATE_BODY" \
+                -o "$AGENT_JSON"
 
             else
               echo "Unexpected status code: $STATUS"
@@ -144,14 +146,13 @@ jobs:
             APP_BODY=$(jq -n \
               --arg displayName "$AGENT_NAME" \
               --arg description "Published agent application for ${AGENT_NAME}" \
-              --arg agentId "$AGENT_ID" \
-              --arg agentName "$AGENT_NAME" \
+              --slurpfile agent "$AGENT_JSON" \
               '{
                 properties: {
                   agents: [
                     {
-                      agentId: $agentId,
-                      agentName: $agentName,
+                      agentId: $agent[0].id,
+                      agentName: $agent[0].name,
                     }
                   ],
                   displayName: $displayName,
@@ -169,17 +170,15 @@ jobs:
             echo "Deploying agent ${AGENT_NAME} with version ${AGENT_VERSION}"
 
             DEPLOY_BODY=$(jq -n \
-              --arg agentId "$AGENT_ID" \
-              --arg agentName "$AGENT_NAME" \
-              --arg agentVersion "$AGENT_VERSION" \
+              --slurpfile agent "$AGENT_JSON" \
               --arg displayName "${AGENT_NAME} deployment" \
               '{
                 properties: {
                   agents: [
                     {
-                      agentId: $agentId,
-                      agentName: $agentName,
-                      agentVersion: "latest"
+                      agentId: $agent[0].id,
+                      agentName: $agent[0].name,
+                      agentVersion: $agent[0].versions.latest.version
                     }
                   ],
                   deploymentType: "Managed",
