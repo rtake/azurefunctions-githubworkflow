@@ -171,6 +171,7 @@ jobs:
 
             APP_AGENT_ID=$(jq -r '.properties.agents[0].agentId' "$APP_JSON")
             APP_AGENT_NAME=$(jq -r '.properties.agents[0].agentName' "$APP_JSON")
+            APP_DEPLOYMENT_ID=$(jq -r '.properties.trafficRoutingPolicy.rules[0].deploymentId // empty' "$APP_JSON")
 
             if [ -z "$APP_AGENT_ID" ] || [ "$APP_AGENT_ID" = "null" ] || \
                [ "$APP_AGENT_NAME" != "$AGENT_NAME" ]; then
@@ -186,7 +187,9 @@ jobs:
 
               if [ "$APP_GET_STATUS" = "200" ] && \
                  [ "$(jq -r '.properties.agents[0].agentName // empty' "$APP_JSON")" = "$AGENT_NAME" ] && \
-                 [ -n "$(jq -r '.properties.agents[0].agentId // empty' "$APP_JSON")" ]; then
+                 [ -n "$(jq -r '.properties.agents[0].agentId // empty' "$APP_JSON")" ] && \
+                 [ -n "$(jq -r '.properties.trafficRoutingPolicy.rules[0].deploymentId // empty' "$APP_JSON")" ]; then
+                APP_DEPLOYMENT_ID=$(jq -r '.properties.trafficRoutingPolicy.rules[0].deploymentId' "$APP_JSON")
                 break
               fi
 
@@ -204,6 +207,8 @@ jobs:
             DEPLOY_BODY=$(jq -n \
               --slurpfile app "$APP_JSON" \
               --arg agentVersion "$AGENT_VERSION" \
+              --arg deploymentId "$APP_DEPLOYMENT_ID" \
+              --arg description "Published deployment for ${AGENT_NAME}" \
               --arg displayName "${AGENT_NAME} deployment" \
               '{
                 properties: {
@@ -214,7 +219,9 @@ jobs:
                       agentVersion: $agentVersion
                     }
                   ],
+                  deploymentId: $deploymentId,
                   deploymentType: "Managed",
+                  description: $description,
                   displayName: $displayName,
                   state: "Starting"
                 }
