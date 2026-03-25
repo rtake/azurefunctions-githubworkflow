@@ -85,6 +85,11 @@ jobs:
               -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
               "$GET_URL" || true)
 
+            PREVIOUS_AGENT_VERSION=""
+            if [ "$STATUS" = "200" ]; then
+              PREVIOUS_AGENT_VERSION=$(jq -r '.versions.latest.version // empty' "$AGENT_JSON")
+            fi
+
             CREATE_BODY=$(jq -n \
               --arg name "$AGENT_NAME" \
               --slurpfile def "$f" \
@@ -127,6 +132,27 @@ jobs:
               exit 1
             fi
 
+            for attempt in 1 2 3 4 5 6 7 8 9 10; do
+              LATEST_JSON=$(mktemp)
+              LATEST_STATUS=$(curl -s -o "$LATEST_JSON" -w "%{http_code}" \
+                -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
+                "$GET_URL" || true)
+
+              if [ "$LATEST_STATUS" = "200" ]; then
+                LATEST_AGENT_VERSION=$(jq -r '.versions.latest.version // empty' "$LATEST_JSON")
+
+                if [ -n "$LATEST_AGENT_VERSION" ]; then
+                  if [ -z "$PREVIOUS_AGENT_VERSION" ] || [ "$LATEST_AGENT_VERSION" != "$PREVIOUS_AGENT_VERSION" ]; then
+                    mv "$LATEST_JSON" "$AGENT_JSON"
+                    break
+                  fi
+                fi
+              fi
+
+              rm -f "$LATEST_JSON"
+              sleep 3
+            done
+
             AGENT_ID=$(jq -r '.id' "$AGENT_JSON")
             AGENT_VERSION=$(jq -r '.versions.latest.version' "$AGENT_JSON")
             echo "Resolved agent id: $AGENT_ID, version: $AGENT_VERSION"
@@ -137,8 +163,15 @@ jobs:
               exit 1
             fi
 
+            if [ -n "$PREVIOUS_AGENT_VERSION" ] && [ "$AGENT_VERSION" = "$PREVIOUS_AGENT_VERSION" ]; then
+              echo "Agent version was not updated after publish. previous=$PREVIOUS_AGENT_VERSION current=$AGENT_VERSION"
+              cat "$AGENT_JSON" || true
+              exit 1
+            fi
+
             APP_NAME="${AGENT_NAME}"
-            DEPLOYMENT_NAME="default"
+            SAFE_AGENT_VERSION=$(printf '%s' "$AGENT_VERSION" | tr -c '[:alnum:]-' '-')
+            DEPLOYMENT_NAME="v-${SAFE_AGENT_VERSION}"
 
             APP_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}?api-version=${API_VERSION}"
             DEPLOY_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}/agentDeployments/${DEPLOYMENT_NAME}?api-version=${API_VERSION}"
@@ -182,6 +215,7 @@ jobs:
                   agents: [
                     {
                       agentName: $agentName,
+                      agentVersion: $agentVersion
                     }
                   ],
                   deploymentType: "Managed",
