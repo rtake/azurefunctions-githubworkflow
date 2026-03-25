@@ -158,6 +158,8 @@ jobs:
               -H "Content-Type: application/json" \
               -d "$APP_BODY"
 
+            echo "Deploying agent ${AGENT_NAME} with version ${AGENT_VERSION}"
+
             DEPLOY_BODY=$(jq -n \
               --arg agentId "$AGENT_ID" \
               --arg agentName "$AGENT_NAME" \

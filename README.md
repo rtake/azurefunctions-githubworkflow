@@ -79,7 +79,6 @@ Queueメッセージをトリガーとして起動し、エージェント定義
 #### 本番デプロイワークフロー ([deploy-agent.yaml](.github/workflows/deploy-agent.yaml))
 
 mainへのPull Requestのマージをトリガーとして起動します。
-_サービスプリンシパル_
 
 (処理概要)
 
@@ -164,7 +163,7 @@ Azure Functionsの環境変数に以下の値を設定します。
 
 [OpenID Connect で Azure ログイン アクションを使用](https://learn.microsoft.com/ja-jp/azure/developer/github/connect-from-azure?tabs=azure-portal%2Clinux#use-the-azure-login-action-with-openid-connect)
 
-作成したサービスプリンシパル(Azure管理画面上ではエンタープライズアプリケーションとして扱われます)に、本番用AI Foundryに対する `Azure AI User` ロールを割り当ててください。
+作成したサービスプリンシパル(Azure管理画面上ではエンタープライズアプリケーションとして扱われます)に、本番用AI Foundryに対する `Azure AI User` ロールと `Cognitive Services 共同作成者` を割り当ててください。
 ![](/docs/role-assignment.png)
 
 #### リポジトリのシークレットと変数の設定
@@ -207,17 +206,7 @@ GitHub上でワークフローが起動し、PR作成が確認できたら成功
 
 ## 今後の改善点
 
-### 優先度高
-
-- ワークフローからデプロイしたエージェントをFoundryポータルから開くと、変更内容がない時にも「保存してください」というメッセージが出る
-  - エージェントを保存するAPIを実行してからPublishする
-
-### 優先度中
-
 - Azure Functionsの環境変数の値をKey Vault等から安全に参照できるようにする(現在の構成ではデプロイのたびに更新が必要になってしまう)
-
-### 優先度低
-
 - Bicepにサービスプリンシパルを追加する
 - Parse Log Functionの呼び出し元をSecure webhookに限定し、アクショングループからのみ呼び出せるようにする ([セキュア Webhook アクション グループを作成する](https://learn.microsoft.com/ja-jp/azure/azure-monitor/alerts/itsm-connector-secure-webhook-connections-azure-configuration#create-a-secure-webhook-action-group))
 - ネットワーク閉域化
