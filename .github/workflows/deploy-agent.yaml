@@ -248,9 +248,6 @@ jobs:
             fi
 
             DEPLOYMENT_ID=$(jq -r '.properties.deploymentId' "$DEPLOY_JSON")
-            if [ -z "$DEPLOYMENT_ID" ] || [ "$DEPLOYMENT_ID" = "null" ]; then
-              DEPLOYMENT_ID="/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}/agentDeployments/${DEPLOYMENT_NAME}"
-            fi
 
             # -----------------------------
             # 4. Link deployment to application
@@ -290,13 +287,13 @@ jobs:
 
             APP_LINK_JSON=$(mktemp)
 
-            curl --fail-with-body --silent --show-error \
-              -X PUT \
-              "$APP_URL" \
-              -H "Authorization: Bearer ${ARM_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d "$APP_LINK_BODY" \
-              -o "$APP_LINK_JSON"
+            # curl --fail-with-body --silent --show-error \
+            #   -X PUT \
+            #   "$APP_URL" \
+            #   -H "Authorization: Bearer ${ARM_TOKEN}" \
+            #   -H "Content-Type: application/json" \
+            #   -d "$APP_LINK_BODY" \
+            #   -o "$APP_LINK_JSON"
 
             echo "Application link response: $(cat "$APP_LINK_JSON")"
 
