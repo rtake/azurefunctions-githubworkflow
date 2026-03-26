@@ -163,6 +163,9 @@ Azure Functionsの環境変数に以下の値を設定します。
 
 [OpenID Connect で Azure ログイン アクションを使用](https://learn.microsoft.com/ja-jp/azure/developer/github/connect-from-azure?tabs=azure-portal%2Clinux#use-the-azure-login-action-with-openid-connect)
 
+> sub値にワイルドカードを使ったマッチングもサポートされているようですが、`az login` では未対応のようだったので今回は使用しないでください。
+> https://learn.microsoft.com/ja-jp/entra/workload-id/workload-identities-flexible-federated-identity-credentials?tabs=github
+
 作成したサービスプリンシパル(Azure管理画面上ではエンタープライズアプリケーションとして扱われます)に、本番用AI Foundryに対する `Azure AI User` ロールと `Cognitive Services 共同作成者` を割り当ててください。
 ![](/docs/role-assignment.png)
 
