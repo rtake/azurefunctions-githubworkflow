@@ -78,33 +78,65 @@ jobs:
             # -----------------------------
             # 1. Create or Update Agent
             # -----------------------------
-            CREATE_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents?api-version=v1"
-
-            CREATE_BODY=$(jq -n \
-              --arg name "$AGENT_NAME" \
-              --slurpfile def "$f" \
-              '{
-                name: $name,
-                definition: $def[0]
-              }')
-
+            GET_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1"
             AGENT_JSON=$(mktemp)
 
-            curl --fail-with-body --silent --show-error \
-              -X POST \
-              "$CREATE_URL" \
+            STATUS=$(curl --silent --show-error \
+              -o "$AGENT_JSON" \
+              -w "%{http_code}" \
               -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d "$CREATE_BODY" \
-              -o "$AGENT_JSON"
+              "$GET_URL" || true)
 
-            echo "Agent response: $(cat $AGENT_JSON)"
+            if [ "$STATUS" = "404" ]; then
+              echo "Creating agent ${PROJECT_NAME}/${AGENT_NAME}"
+
+              CREATE_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents?api-version=v1"
+              CREATE_BODY=$(jq -n \
+                --arg name "$AGENT_NAME" \
+                --slurpfile def "$f" \
+                '{
+                  name: $name,
+                  definition: $def[0]
+                }')
+
+              curl --fail-with-body --silent --show-error \
+                -X POST \
+                "$CREATE_URL" \
+                -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "$CREATE_BODY" \
+                -o "$AGENT_JSON"
+            elif [ "$STATUS" = "200" ]; then
+              echo "Updating agent ${PROJECT_NAME}/${AGENT_NAME}"
+
+              UPDATE_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1"
+              UPDATE_BODY=$(jq -n \
+                --slurpfile def "$f" \
+                '{
+                  definition: $def[0]
+                }')
+
+              curl --fail-with-body --silent --show-error \
+                -X POST \
+                "$UPDATE_URL" \
+                -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "$UPDATE_BODY" \
+                -o "$AGENT_JSON"
+            else
+              echo "Failed to check existing agent ${PROJECT_NAME}/${AGENT_NAME}: HTTP ${STATUS}"
+              cat "$AGENT_JSON" || true
+              exit 1
+            fi
+
+            echo "Agent response: $(cat "$AGENT_JSON")"
 
             AGENT_ID=$(jq -r '.id' "$AGENT_JSON")
             AGENT_VERSION=$(jq -r '.versions.latest.version' "$AGENT_JSON")
 
-            if [ -z "$AGENT_ID" ] || [ "$AGENT_ID" = "null" ]; then
-              echo "Failed to resolve agent id"
+            if [ -z "$AGENT_ID" ] || [ "$AGENT_ID" = "null" ] || [ -z "$AGENT_VERSION" ] || [ "$AGENT_VERSION" = "null" ]; then
+              echo "Failed to resolve agent id/version"
+              cat "$AGENT_JSON" || true
               exit 1
             fi
 
