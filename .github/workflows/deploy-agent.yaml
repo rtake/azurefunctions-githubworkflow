@@ -181,7 +181,7 @@ jobs:
             DEPLOYMENT_NAME="default" # "${SAFE_AGENT_VERSION}"
 
             APP_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${AGENT_NAME}?api-version=${API_VERSION}"
-            DEPLOY_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${AGENT_NAME}/agentDeployments/${AGENT_NAME}-${SAFE_AGENT_VERSION}?api-version=${API_VERSION}"
+            DEPLOY_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${AGENT_NAME}/agentDeployments/${AGENT_NAME}?api-version=${API_VERSION}"
 
             # ToDo: 要・不要精査の上削除
             APP_BODY=$(jq -n \
