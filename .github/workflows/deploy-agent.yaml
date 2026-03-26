@@ -148,14 +148,12 @@ jobs:
             DEPLOY_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${AGENT_NAME}/agentDeployments/${AGENT_NAME}?api-version=${API_VERSION}"
 
             DEPLOY_BODY=$(jq -n \
-              --arg agentId "$AGENT_ID" \
               --arg agentName "$AGENT_NAME" \
               --arg agentVersion "$SAFE_AGENT_VERSION" \
               '{
                 properties: {
                   agents: [
                     {
-                      agentId: $agentId,
                       agentName: $agentName,
                       agentVersion: $agentVersion
                     }
