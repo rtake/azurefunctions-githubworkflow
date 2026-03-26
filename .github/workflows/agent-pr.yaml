@@ -20,6 +20,10 @@ on:
         type: string
         description: "Base64-encoded JSON string of the agent definition"
 
+concurrency:
+  group: agent-pr-${{ github.event.inputs.project_name }}-${{ github.event.inputs.app_name }}-${{ github.event.inputs.deployment_name }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pull-requests: write
@@ -31,11 +35,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Create branch and write file
+        id: prepare-branch
         run: |
           set -e
 
-          BRANCH=feature/${{ github.event.inputs.app_name }}/${{ github.event.inputs.deployment_name }}-${{ github.run_id }}
-          git checkout -b "$BRANCH"
+          BRANCH=feature/${{ github.event.inputs.project_name }}/${{ github.event.inputs.app_name }}-${{ github.event.inputs.deployment_name }}
+          git checkout -B "$BRANCH"
 
           DIRECTORY=agents/projects/${{ github.event.inputs.project_name }}
           mkdir -p "$DIRECTORY"
@@ -54,13 +59,44 @@ jobs:
           git config user.email bot@users.noreply.github.com
 
           git add .
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
           git commit -m "Add agent"
-          git push origin HEAD
+          git push --force-with-lease origin HEAD
+
+      - name: Check existing PR
+        id: existing-pr
+        if: steps.prepare-branch.outputs.has_changes == 'true'
+        run: |
+          set -e
+
+          BRANCH=feature/${{ github.event.inputs.project_name }}/${{ github.event.inputs.app_name }}-${{ github.event.inputs.deployment_name }}
+          PR_URL=$(gh pr list \
+            --head "$BRANCH" \
+            --base main \
+            --state open \
+            --json url \
+            --jq '.[0].url // ""')
+
+          echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create PR
+        if: steps.prepare-branch.outputs.has_changes == 'true' && steps.existing-pr.outputs.url == ''
         run: |
           gh pr create \
             --title "Update agent ${{ github.event.inputs.app_name }}" \
             --body "Deployment: ${{ github.event.inputs.deployment_name }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Reuse existing PR
+        if: steps.prepare-branch.outputs.has_changes == 'true' && steps.existing-pr.outputs.url != ''
+        run: |
+          echo "Existing PR found: ${{ steps.existing-pr.outputs.url }}"
