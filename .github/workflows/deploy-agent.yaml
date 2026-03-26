@@ -35,9 +35,23 @@ jobs:
       - name: Detect changed agents
         id: changes
         run: |
-          DEPLOY_FILES=$(git diff --name-status "${{ github.event.before }}" "${{ github.sha }}" \
+          BEFORE_SHA="${{ github.event.before }}"
+          AFTER_SHA="${{ github.sha }}"
+          ZERO_SHA="0000000000000000000000000000000000000000"
+
+          if [ "$BEFORE_SHA" = "$ZERO_SHA" ]; then
+            if git rev-parse "${AFTER_SHA}^" >/dev/null 2>&1; then
+              DIFF_OUTPUT=$(git diff --name-status "${AFTER_SHA}^" "$AFTER_SHA")
+            else
+              DIFF_OUTPUT=$(git diff-tree --root --no-commit-id --name-status -r "$AFTER_SHA")
+            fi
+          else
+            DIFF_OUTPUT=$(git diff --name-status "$BEFORE_SHA" "$AFTER_SHA")
+          fi
+
+          DEPLOY_FILES=$(printf '%s\n' "$DIFF_OUTPUT" \
             | awk '$1 != "D" && $2 ~ /^agents\/.*\.json$/ { print $2 }')
-          DELETED_FILES=$(git diff --name-status "${{ github.event.before }}" "${{ github.sha }}" \
+          DELETED_FILES=$(printf '%s\n' "$DIFF_OUTPUT" \
             | awk '$1 == "D" && $2 ~ /^agents\/.*\.json$/ { print $2 }')
 
           {
