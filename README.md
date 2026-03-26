@@ -213,7 +213,7 @@ GitHub上でワークフローが起動し、PR作成が確認できたら成功
 - Bicepでモデルをデプロイできるようにする
   - 本番環境でモデルがデプロイされていない場合にはデプロイする
 - Bicep分割
-- Azure Functionsの環境変数の値をKey Vault等から安全に参照できるようにする(現在の構成ではデプロイのたびに更新が必要になってしまう)
 - Bicepにサービスプリンシパルを追加する
+- Azure Functionsの環境変数の値をKey Vault等から安全に参照できるようにする(現在の構成ではデプロイのたびに更新が必要になってしまう)
 - Parse Log Functionの呼び出し元をSecure webhookに限定し、アクショングループからのみ呼び出せるようにする ([セキュア Webhook アクション グループを作成する](https://learn.microsoft.com/ja-jp/azure/azure-monitor/alerts/itsm-connector-secure-webhook-connections-azure-configuration#create-a-secure-webhook-action-group))
 - ネットワーク閉域化

@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+
+collect_agents() {
+  local files="${FILES:-}"
+  local foundry_token="${FOUNDRY_TOKEN:?FOUNDRY_TOKEN is required}"
+  local agents_json
+
+  agents_json=$(jq -cn '[]')
+
+  while IFS= read -r agent_file; do
+    [ -z "$agent_file" ] && continue
+
+    local agent_name get_url get_response status agent_response
+    local agent_id agent_version safe_agent_version app_name deployment_name agent_state
+
+    agent_name=$(agent_file_to_name "$agent_file")
+    echo "=== Processing ${agent_name} ==="
+
+    get_url="$(foundry_base_url)/api/projects/${PROJECT_NAME}/agents/${agent_name}?api-version=v1"
+    get_response=$(get_json_with_status "$get_url" "$foundry_token")
+    status="${get_response: -3}"
+    agent_response="${get_response%???}"
+
+    if [ "$status" = "404" ]; then
+      echo "Creating agent ${PROJECT_NAME}/${agent_name}"
+      agent_response=$(post_json \
+        "$(foundry_base_url)/api/projects/${PROJECT_NAME}/agents?api-version=v1" \
+        "$foundry_token" \
+        "$(build_agent_create_body "$agent_name" "$agent_file")")
+    elif [ "$status" = "200" ]; then
+      echo "Updating agent ${PROJECT_NAME}/${agent_name}"
+      agent_response=$(post_json \
+        "$(foundry_base_url)/api/projects/${PROJECT_NAME}/agents/${agent_name}?api-version=v1" \
+        "$foundry_token" \
+        "$(build_agent_update_body "$agent_file")")
+    else
+      echo "Failed to check existing agent ${PROJECT_NAME}/${agent_name}: HTTP ${status}"
+      [ -n "$agent_response" ] && echo "$agent_response"
+      exit 1
+    fi
+
+    log_response "Agent response" "$agent_response"
+
+    agent_id=$(require_json_field "$agent_response" '.id' "Failed to resolve agent id")
+    agent_version=$(require_json_field "$agent_response" '.versions.latest.version' "Failed to resolve agent version")
+    safe_agent_version=$(printf '%s' "$agent_version" | tr -c '[:alnum:]-' '-')
+    app_name="$agent_name"
+    deployment_name="v-${safe_agent_version}"
+
+    agent_state=$(build_agent_state \
+      "$agent_name" \
+      "$agent_file" \
+      "$agent_id" \
+      "$agent_version" \
+      "$app_name" \
+      "$deployment_name")
+
+    agents_json=$(append_agent "$agents_json" "$agent_state")
+  done <<< "$files"
+
+  write_output_json "agents" "$agents_json"
+}
+
+upsert_applications() {
+  local agents="${AGENTS:?AGENTS is required}"
+  local arm_token="${ARM_TOKEN:?ARM_TOKEN is required}"
+
+  while IFS= read -r agent; do
+    local agent_name agent_id app_name app_response
+
+    agent_name=$(agent_field "$agent" "agentName")
+    agent_id=$(agent_field "$agent" "agentId")
+    app_name=$(agent_field "$agent" "appName")
+
+    echo "=== Creating or updating application ${app_name} ==="
+
+    app_response=$(put_json \
+      "$(application_url "$app_name")" \
+      "$arm_token" \
+      "$(build_application_body "$agent_name" "$agent_id")")
+    log_response "Application response" "$app_response"
+  done < <(jq -c '.[]' <<< "$agents")
+}
+
+create_deployments() {
+  local agents="${AGENTS:?AGENTS is required}"
+  local arm_token="${ARM_TOKEN:?ARM_TOKEN is required}"
+  local deployed_agents_json
+
+  deployed_agents_json=$(jq -cn '[]')
+
+  while IFS= read -r agent; do
+    local agent_name agent_version app_name deployment_name deploy_response deployment_id deployed_agent
+
+    agent_name=$(agent_field "$agent" "agentName")
+    agent_version=$(agent_field "$agent" "agentVersion")
+    app_name=$(agent_field "$agent" "appName")
+    deployment_name=$(agent_field "$agent" "deploymentName")
+
+    echo "=== Creating deployment for ${app_name} ==="
+
+    deploy_response=$(put_json \
+      "$(deployment_url "$app_name")" \
+      "$arm_token" \
+      "$(build_deployment_body "$agent_name" "$agent_version")")
+    log_response "Deployment response" "$deploy_response"
+
+    deployment_id=$(jq -r '.properties.deploymentId' <<< "$deploy_response")
+    if [ -z "$deployment_id" ] || [ "$deployment_id" = "null" ]; then
+      deployment_id=$(fallback_deployment_id "$app_name" "$deployment_name")
+    fi
+
+    deployed_agent=$(jq -c \
+      --arg deploymentId "$deployment_id" \
+      '. + { deploymentId: $deploymentId }' \
+      <<< "$agent")
+
+    deployed_agents_json=$(append_agent "$deployed_agents_json" "$deployed_agent")
+  done < <(jq -c '.[]' <<< "$agents")
+
+  write_output_json "agents" "$deployed_agents_json"
+}
+
+link_deployments() {
+  local agents="${AGENTS:?AGENTS is required}"
+  local arm_token="${ARM_TOKEN:?ARM_TOKEN is required}"
+
+  while IFS= read -r agent; do
+    local agent_name agent_id app_name deployment_id app_link_response
+
+    agent_name=$(agent_field "$agent" "agentName")
+    agent_id=$(agent_field "$agent" "agentId")
+    app_name=$(agent_field "$agent" "appName")
+    deployment_id=$(agent_field "$agent" "deploymentId")
+
+    echo "=== Linking deployment for ${app_name} ==="
+
+    app_link_response=$(put_json \
+      "$(application_url "$app_name")" \
+      "$arm_token" \
+      "$(build_application_link_body "$agent_name" "$agent_id" "$deployment_id")")
+    log_response "Application link response" "$app_link_response"
+  done < <(jq -c '.[]' <<< "$agents")
+}

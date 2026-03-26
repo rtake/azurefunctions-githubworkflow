@@ -67,7 +67,7 @@ jobs:
           FILES: ${{ steps.changes.outputs.files }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
-          bash .github/scripts/deploy_agents.sh collect-agents
+          bash .github/scripts/deploy_agent/run.sh collect-agents
 
       - name: Create or update applications
         if: steps.changes.outputs.files != ''
@@ -76,7 +76,7 @@ jobs:
           AGENTS: ${{ steps.agents.outputs.agents }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
-          bash .github/scripts/deploy_agents.sh upsert-applications
+          bash .github/scripts/deploy_agent/run.sh upsert-applications
 
       - name: Create deployments
         id: deployments
@@ -86,7 +86,7 @@ jobs:
           AGENTS: ${{ steps.agents.outputs.agents }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
-          bash .github/scripts/deploy_agents.sh create-deployments
+          bash .github/scripts/deploy_agent/run.sh create-deployments
 
       - name: Link deployments to applications
         if: steps.changes.outputs.files != ''
@@ -95,4 +95,4 @@ jobs:
           AGENTS: ${{ steps.deployments.outputs.agents }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
-          bash .github/scripts/deploy_agents.sh link-deployments
+          bash .github/scripts/deploy_agent/run.sh link-deployments
