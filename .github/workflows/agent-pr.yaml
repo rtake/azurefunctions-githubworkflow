@@ -21,7 +21,7 @@ on:
         description: "Base64-encoded JSON string of the agent definition"
 
 concurrency:
-  group: agent-pr-${{ github.event.inputs.project_name }}-${{ github.event.inputs.app_name }}-${{ github.event.inputs.deployment_name }}
+  group: agent-pr-${{ github.event.inputs.project_name }}-${{ github.event.inputs.app_name }}
   cancel-in-progress: false
 
 permissions:
@@ -39,7 +39,7 @@ jobs:
         run: |
           set -e
 
-          BRANCH=feature/${{ github.event.inputs.project_name }}/${{ github.event.inputs.app_name }}-${{ github.event.inputs.deployment_name }}
+          BRANCH=feature/${{ github.event.inputs.project_name }}/${{ github.event.inputs.app_name }}
           git checkout -B "$BRANCH"
 
           DIRECTORY=agents/projects/${{ github.event.inputs.project_name }}
@@ -75,7 +75,7 @@ jobs:
         run: |
           set -e
 
-          BRANCH=feature/${{ github.event.inputs.project_name }}/${{ github.event.inputs.app_name }}-${{ github.event.inputs.deployment_name }}
+          BRANCH=feature/${{ github.event.inputs.project_name }}/${{ github.event.inputs.app_name }}
           PR_URL=$(gh pr list \
             --head "$BRANCH" \
             --base main \
