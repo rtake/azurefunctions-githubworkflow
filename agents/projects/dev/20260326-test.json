@@ -1,0 +1,10 @@
+{
+  "kind": "prompt",
+  "model": "gpt-4.1",
+  "instructions": "テスト",
+  "tools": [
+    {
+      "type": "web_search"
+    }
+  ]
+}
