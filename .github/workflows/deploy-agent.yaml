@@ -141,37 +141,80 @@ jobs:
             fi
 
             SAFE_AGENT_VERSION=$(printf '%s' "$AGENT_VERSION" | tr -c '[:alnum:]-' '-')
+            DEPLOYMENT_NAME="${AGENT_NAME}-${SAFE_AGENT_VERSION}"
+            DEPLOYMENT_ID="$DEPLOYMENT_NAME"
 
             # -----------------------------
-            # 2. Create Deployment
+            # 2. Ensure Application exists
             # -----------------------------
-            DEPLOY_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${AGENT_NAME}/agentDeployments/${AGENT_NAME}?api-version=${API_VERSION}"
+            APP_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${AGENT_NAME}?api-version=${API_VERSION}"
+
+            APP_BASE_BODY=$(jq -n \
+              --arg displayName "$AGENT_NAME" \
+              --arg description "Published agent application" \
+              --arg baseUrl "${BASE_URL}/api/projects/${PROJECT_NAME}/applications/${AGENT_NAME}" \
+              --arg agentId "$AGENT_ID" \
+              --arg agentName "$AGENT_NAME" \
+              '{
+                properties: {
+                  displayName: $displayName,
+                  description: $description,
+                  baseUrl: $baseUrl,
+                  agents: [
+                    {
+                      agentId: $agentId,
+                      agentName: $agentName
+                    }
+                  ],
+                  authorizationPolicy: {
+                    type: "Default"
+                  }
+                }
+              }')
+
+            APP_JSON=$(mktemp)
+
+            curl --fail-with-body --silent --show-error \
+              -X PUT \
+              "$APP_URL" \
+              -H "Authorization: Bearer ${ARM_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$APP_BASE_BODY" \
+              -o "$APP_JSON"
+
+            echo "Application base response: $(cat "$APP_JSON")"
+
+            # -----------------------------
+            # 3. Create Deployment
+            # -----------------------------
+            DEPLOY_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${AGENT_NAME}/agentDeployments/${DEPLOYMENT_NAME}?api-version=${API_VERSION}"
 
             DEPLOY_BODY=$(jq -n \
+              --arg agentId "$AGENT_ID" \
               --arg agentName "$AGENT_NAME" \
               --arg agentVersion "$SAFE_AGENT_VERSION" \
+              --arg deploymentId "$DEPLOYMENT_ID" \
               '{
                 properties: {
                   agents: [
                     {
+                      agentId: $agentId,
                       agentName: $agentName,
                       agentVersion: $agentVersion
                     }
                   ],
+                  deploymentId: $deploymentId,
                   deploymentType: "Managed",
-                  displayName: "deployment",
+                  displayName: $agentName,
                   protocols: [
                     {
                       protocol: "Responses",
                       version: "1.0"
                     }
                   ],
-                  state: "Starting"
+                  state: "Running"
                 }
               }')
-
-            echo $DEPLOY_URL
-            echo "DEPLOY_BODY: $DEPLOY_BODY"
 
             DEPLOY_JSON=$(mktemp)
 
@@ -183,22 +226,23 @@ jobs:
               -d "$DEPLOY_BODY" \
               -o "$DEPLOY_JSON"
 
-            echo "Deployment response: $(cat $DEPLOY_JSON)"
+            echo "Deployment response: $(cat "$DEPLOY_JSON")"
 
-            DEPLOYMENT_ID=$(jq -r '.properties.deploymentId' "$DEPLOY_JSON")
+            DEPLOYMENT_ID=$(jq -r '.properties.deploymentId // empty' "$DEPLOY_JSON")
+
+            if [ -z "$DEPLOYMENT_ID" ]; then
+              DEPLOYMENT_ID="$DEPLOYMENT_NAME"
+            fi
 
             # -----------------------------
-            # 3. Create/Update Application（1回のみ）
+            # 4. Update Application routing
             # -----------------------------
-            APP_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${AGENT_NAME}?api-version=${API_VERSION}"
-
             APP_BODY=$(jq -n \
               --arg displayName "$AGENT_NAME" \
               --arg description "Published agent application" \
               --arg baseUrl "${BASE_URL}/api/projects/${PROJECT_NAME}/applications/${AGENT_NAME}" \
               --arg agentId "$AGENT_ID" \
               --arg agentName "$AGENT_NAME" \
-              --arg tenantId "${{ secrets.AZURE_TENANT_ID }}" \
               --arg deploymentId "$DEPLOYMENT_ID" \
               '{
                 properties: {
@@ -211,17 +255,9 @@ jobs:
                       agentName: $agentName
                     }
                   ],
-                  agentIdentityBlueprint: {
-                    kind: "AgentBlueprint",
-                    type: "System",
-                    tenantId: $tenantId
+                  authorizationPolicy: {
+                    type: "Default"
                   },
-                  defaultInstanceIdentity: {
-                    kind: "AgentInstance",
-                    type: "System",
-                    tenantId: $tenantId
-                  },
-                  authorizationPolicy: {},
                   trafficRoutingPolicy: {
                     protocol: "FixedRatio",
                     rules: [
@@ -241,8 +277,9 @@ jobs:
               "$APP_URL" \
               -H "Authorization: Bearer ${ARM_TOKEN}" \
               -H "Content-Type: application/json" \
-              -d "$APP_BODY"
+              -d "$APP_BODY" \
+              -o "$APP_JSON"
 
-            echo "Application updated"
+            echo "Application updated: $(cat "$APP_JSON")"
 
           done <<< "$FILES"
