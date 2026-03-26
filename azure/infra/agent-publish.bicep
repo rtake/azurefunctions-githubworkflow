@@ -28,7 +28,7 @@ resource application 'Microsoft.CognitiveServices/accounts/projects/applications
       }
     ]
     authorizationPolicy: {
-      type: 'Default'
+      authorizationScheme: 'Default'
     }
     trafficRoutingPolicy: {
       protocol: 'FixedRatio'
