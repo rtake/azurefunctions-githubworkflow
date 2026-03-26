@@ -1,7 +1,7 @@
 {
   "kind": "prompt",
   "model": "gpt-4.1",
-  "instructions": "新規作成 20260322-4\n20260324 更新-3\n20260326 更新",
+  "instructions": "最終テスト",
   "tools": [
     {
       "type": "web_search"
