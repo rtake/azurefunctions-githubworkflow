@@ -166,9 +166,11 @@ jobs:
                       version: "1.0"
                     }
                   ],
-                  state: "Running"
+                  state: "Starting"
                 }
               }')
+
+            echo $(cat "$DEPLOY_BODY")
 
             DEPLOY_JSON=$(mktemp)
 
