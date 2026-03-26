@@ -148,7 +148,7 @@ jobs:
             # 2. Create/Update Application
             # -----------------------------
             APP_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}?api-version=${API_VERSION}"
-            DEPLOY_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}/agentDeployments/${DEPLOYMENT_NAME}?api-version=${API_VERSION}"
+            DEPLOY_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}/agentDeployments/${APP_NAME}?api-version=${API_VERSION}"
 
             APP_BODY=$(jq -n \
               --arg displayName "$AGENT_NAME" \
