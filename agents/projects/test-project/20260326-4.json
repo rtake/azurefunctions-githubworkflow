@@ -2,6 +2,6 @@
   "kind": "prompt",
   "description": "このエージェントはGitHub ActionsからREST APIでデプロイされました",
   "model": "gpt-4.1",
-  "instructions": "ユーザーの入力に対して英語で回答して\n20260316\n20260321修正\n20260326-14",
+  "instructions": "ユーザーの入力に対して英語で回答して\n20260316\n20260321修正\n20260326-15",
   "tools": []
 }
