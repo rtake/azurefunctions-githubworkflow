@@ -287,13 +287,13 @@ jobs:
 
             APP_LINK_JSON=$(mktemp)
 
-            # curl --fail-with-body --silent --show-error \
-            #   -X PUT \
-            #   "$APP_URL" \
-            #   -H "Authorization: Bearer ${ARM_TOKEN}" \
-            #   -H "Content-Type: application/json" \
-            #   -d "$APP_LINK_BODY" \
-            #   -o "$APP_LINK_JSON"
+            curl --fail-with-body --silent --show-error \
+              -X PUT \
+              "$APP_URL" \
+              -H "Authorization: Bearer ${ARM_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$APP_LINK_BODY" \
+              -o "$APP_LINK_JSON"
 
             echo "Application link response: $(cat "$APP_LINK_JSON")"
 
