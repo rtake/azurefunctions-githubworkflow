@@ -141,31 +141,30 @@ jobs:
             fi
 
             SAFE_AGENT_VERSION=$(printf '%s' "$AGENT_VERSION" | tr -c '[:alnum:]-' '-')
-            DEPLOYMENT_NAME="${AGENT_NAME}-${SAFE_AGENT_VERSION}"
-            DEPLOYMENT_ID="$DEPLOYMENT_NAME"
-            ARM_AGENT_ID="azureml://subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/workspaces/${AIFOUNDRY_ACCOUNT_NAME}@${PROJECT_NAME}@AML/applications/${AGENT_NAME}/agents/${AGENT_NAME}"
+            APP_NAME="${AGENT_NAME}"
+            DEPLOYMENT_NAME="v-${SAFE_AGENT_VERSION}"
 
             # -----------------------------
-            # 2. Ensure Application exists
+            # 2. Create/Update Application
             # -----------------------------
-            APP_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${AGENT_NAME}?api-version=${API_VERSION}"
+            APP_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}?api-version=${API_VERSION}"
+            DEPLOY_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}/agentDeployments/${DEPLOYMENT_NAME}?api-version=${API_VERSION}"
 
-            APP_BASE_BODY=$(jq -n \
+            APP_BODY=$(jq -n \
               --arg displayName "$AGENT_NAME" \
-              --arg agentId "$ARM_AGENT_ID" \
+              --arg description "Published agent application for ${AGENT_NAME}" \
+              --arg agentId "$AGENT_ID" \
               --arg agentName "$AGENT_NAME" \
               '{
                 properties: {
-                  displayName: $displayName,
                   agents: [
                     {
                       agentId: $agentId,
                       agentName: $agentName
                     }
                   ],
-                  authorizationPolicy: {
-                    type: "Default"
-                  }
+                  displayName: $displayName,
+                  description: $description
                 }
               }')
 
@@ -176,40 +175,35 @@ jobs:
               "$APP_URL" \
               -H "Authorization: Bearer ${ARM_TOKEN}" \
               -H "Content-Type: application/json" \
-              -d "$APP_BASE_BODY" \
+              -d "$APP_BODY" \
               -o "$APP_JSON"
 
-            echo "Application base response: $(cat "$APP_JSON")"
+            echo "Application response: $(cat "$APP_JSON")"
 
             # -----------------------------
             # 3. Create Deployment
             # -----------------------------
-            DEPLOY_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${AGENT_NAME}/agentDeployments/${DEPLOYMENT_NAME}?api-version=${API_VERSION}"
-
             DEPLOY_BODY=$(jq -n \
-              --arg agentId "$ARM_AGENT_ID" \
               --arg agentName "$AGENT_NAME" \
-              --arg agentVersion "$SAFE_AGENT_VERSION" \
-              --arg deploymentId "$DEPLOYMENT_ID" \
+              --arg agentVersion "$AGENT_VERSION" \
+              --arg displayName "${AGENT_NAME} deployment" \
               '{
                 properties: {
                   agents: [
                     {
-                      agentId: $agentId,
                       agentName: $agentName,
                       agentVersion: $agentVersion
                     }
                   ],
-                  deploymentId: $deploymentId,
                   deploymentType: "Managed",
-                  displayName: $agentName,
+                  displayName: $displayName,
                   protocols: [
                     {
                       protocol: "Responses",
                       version: "1.0"
                     }
                   ],
-                  state: "Running"
+                  state: "Starting"
                 }
               }')
 
@@ -225,38 +219,39 @@ jobs:
 
             echo "Deployment response: $(cat "$DEPLOY_JSON")"
 
-            DEPLOYMENT_ID=$(jq -r '.properties.deploymentId // empty' "$DEPLOY_JSON")
-
-            if [ -z "$DEPLOYMENT_ID" ]; then
-              DEPLOYMENT_ID="$DEPLOYMENT_NAME"
+            DEPLOYMENT_ID=$(jq -r '.properties.deploymentId' "$DEPLOY_JSON")
+            if [ -z "$DEPLOYMENT_ID" ] || [ "$DEPLOYMENT_ID" = "null" ]; then
+              DEPLOYMENT_ID="/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}/agentDeployments/${DEPLOYMENT_NAME}"
             fi
 
             # -----------------------------
-            # 4. Update Application routing
+            # 4. Link deployment to application
             # -----------------------------
-            APP_BODY=$(jq -n \
+            APP_LINK_BODY=$(jq -n \
               --arg displayName "$AGENT_NAME" \
-              --arg agentId "$ARM_AGENT_ID" \
+              --arg description "Published agent application for ${AGENT_NAME}" \
+              --arg agentId "$AGENT_ID" \
               --arg agentName "$AGENT_NAME" \
               --arg deploymentId "$DEPLOYMENT_ID" \
               '{
                 properties: {
-                  displayName: $displayName,
                   agents: [
                     {
                       agentId: $agentId,
                       agentName: $agentName
                     }
                   ],
+                  displayName: $displayName,
+                  description: $description,
                   authorizationPolicy: {
-                    type: "Default"
+                    authorizationScheme: "Default"
                   },
                   trafficRoutingPolicy: {
                     protocol: "FixedRatio",
                     rules: [
                       {
-                        ruleId: "route-1",
-                        description: "default route",
+                        ruleId: "default",
+                        description: "Default rule routing all traffic to the first deployment",
                         deploymentId: $deploymentId,
                         trafficPercentage: 100
                       }
@@ -265,14 +260,16 @@ jobs:
                 }
               }')
 
+            APP_LINK_JSON=$(mktemp)
+
             curl --fail-with-body --silent --show-error \
               -X PUT \
               "$APP_URL" \
               -H "Authorization: Bearer ${ARM_TOKEN}" \
               -H "Content-Type: application/json" \
-              -d "$APP_BODY" \
-              -o "$APP_JSON"
+              -d "$APP_LINK_BODY" \
+              -o "$APP_LINK_JSON"
 
-            echo "Application updated: $(cat "$APP_JSON")"
+            echo "Application link response: $(cat "$APP_LINK_JSON")"
 
           done <<< "$FILES"
