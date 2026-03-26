@@ -35,13 +35,27 @@ jobs:
       - name: Detect changed agents
         id: changes
         run: |
-          CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep '^agents/.*\.json$' || true)
+          DEPLOY_FILES=$(git diff --name-status "${{ github.event.before }}" "${{ github.sha }}" \
+            | awk '$1 != "D" && $2 ~ /^agents\/.*\.json$/ { print $2 }')
+          DELETED_FILES=$(git diff --name-status "${{ github.event.before }}" "${{ github.sha }}" \
+            | awk '$1 == "D" && $2 ~ /^agents\/.*\.json$/ { print $2 }')
 
           {
-            echo "files<<EOF"
-            echo "$CHANGED"
+            echo "deploy_files<<EOF"
+            echo "$DEPLOY_FILES"
+            echo "EOF"
+            echo "deleted_files<<EOF"
+            echo "$DELETED_FILES"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Log deleted agents
+        if: steps.changes.outputs.deleted_files != ''
+        env:
+          DELETED_FILES: ${{ steps.changes.outputs.deleted_files }}
+        run: |
+          echo "Skipping deleted agent definitions:"
+          echo "$DELETED_FILES"
 
       - name: Get Foundry token
         id: foundry_token
@@ -61,16 +75,16 @@ jobs:
 
       - name: Create or update changed agents
         id: agents
-        if: steps.changes.outputs.files != ''
+        if: steps.changes.outputs.deploy_files != ''
         env:
           FOUNDRY_TOKEN: ${{ steps.foundry_token.outputs.token }}
-          FILES: ${{ steps.changes.outputs.files }}
+          FILES: ${{ steps.changes.outputs.deploy_files }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
           bash .github/scripts/deploy_agent/run.sh collect-agents
 
       - name: Create or update applications
-        if: steps.changes.outputs.files != ''
+        if: steps.changes.outputs.deploy_files != ''
         env:
           ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
           AGENTS: ${{ steps.agents.outputs.agents }}
@@ -80,7 +94,7 @@ jobs:
 
       - name: Create deployments
         id: deployments
-        if: steps.changes.outputs.files != ''
+        if: steps.changes.outputs.deploy_files != ''
         env:
           ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
           AGENTS: ${{ steps.agents.outputs.agents }}
@@ -89,7 +103,7 @@ jobs:
           bash .github/scripts/deploy_agent/run.sh create-deployments
 
       - name: Link deployments to applications
-        if: steps.changes.outputs.files != ''
+        if: steps.changes.outputs.deploy_files != ''
         env:
           ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
           AGENTS: ${{ steps.deployments.outputs.agents }}

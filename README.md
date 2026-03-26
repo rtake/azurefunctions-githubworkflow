@@ -206,8 +206,6 @@ GitHub上でワークフローが起動し、PR作成が確認できたら成功
 
 ## 今後の改善点
 
-- JSON削除時のバグ
-  - https://github.com/rtake/azure-agentservice-gitops/actions/runs/23555497605/job/68581023102
 - Bicepでモデルをデプロイできるようにする
   - 本番環境でモデルがデプロイされていない場合にはデプロイする
 - Bicep分割
