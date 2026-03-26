@@ -90,6 +90,7 @@ mainへのPull Requestのマージをトリガーとして起動します。
 
 モデルデプロイの既定値は [azure/infra/model-config.json](/azure/infra/model-config.json) で管理します。
 `models` にモデル名ごとの上書きを定義しない場合は、エージェント定義の `model` をそのままデプロイ名/モデル名として扱います。
+Azure の application / agent deployment リソース名には使用可能な文字制約があるため、デプロイ時にはエージェント名やバージョンから Azure 向けの安全な名前を自動生成します。表示名とエージェント参照には元のエージェント名を維持します。
 
 ## デプロイ手順
 
@@ -141,6 +142,7 @@ az deployment group what-if \
   --parameters \
     accountName=<FoundryAccountName> \
     projectName=prod \
+    applicationName=<SafeApplicationName> \
     agentName=<AgentName> \
     agentId=<AgentId> \
     agentVersion=<AgentVersion> \
@@ -167,11 +169,11 @@ func azure functionapp publish <FunctionAppName> # デプロイ
 
 Azure Functionsの環境変数に以下の値を設定します。
 
-| 変数         | 説明                                                                                                            |
-| ------------ | --------------------------------------------------------------------------------------------------------------- |
-| GITHUB_OWNER | GitHubリポジトリのユーザー名                                                                                    |
-| GITHUB_REPO  | GitHubのリポジトリ名                                                                                            |
-| GITHUB_TOKEN | GitHub Actions用のシークレット。GitHubのアカウントページのDeveloper settings -> Fine-grained tokensを作成します |
+| 変数         | 説明                                                                                                                    |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| GITHUB_OWNER | GitHubリポジトリのユーザー名                                                                                            |
+| GITHUB_REPO  | GitHubのリポジトリ名                                                                                                    |
+| GITHUB_TOKEN | GitHub Actions用のシークレット。GitHubのアカウントページのDeveloper settings -> Fine-grained tokensを作成して設定します |
 
 以下の変数は `az deployment create` コマンドを実行した際に自動で設定されます。
 
@@ -180,8 +182,9 @@ Azure Functionsの環境変数に以下の値を設定します。
 | QUEUE_CONNECTION_STRING | Queue storageの接続文字列                                                                         |
 | QUEUE_NAME              | 2つのAzure Functionsを接続するために使用するキューの名前 (このリポジトリでは `queue-agentdeploy`) |
 
-`upload-agent-from-queue` でAI Foundryにアクセスするためのロールが必要です。
-デプロイした Azure Functionsに、開発用AI Foundryに対する `Cognitive Serviceユーザー` ロールを割り当ててください。
+~~`upload-agent-from-queue` でAI Foundryにアクセスするためのロールが必要です。
+デプロイした Azure Functionsに、開発用AI Foundryに対する `Cognitive Serviceユーザー` ロールを割り当ててください。~~\
+`az deployment` で自動設定できるように修正中
 
 ### アラート設定
 
@@ -199,10 +202,9 @@ Azure Functionsの環境変数に以下の値を設定します。
 
 [OpenID Connect で Azure ログイン アクションを使用](https://learn.microsoft.com/ja-jp/azure/developer/github/connect-from-azure?tabs=azure-portal%2Clinux#use-the-azure-login-action-with-openid-connect)
 
-> sub値にワイルドカードを使ったマッチングもサポートされているようですが、`az login` では未対応のようだったので今回は使用しないでください。
-> https://learn.microsoft.com/ja-jp/entra/workload-id/workload-identities-flexible-federated-identity-credentials?tabs=github
-
 作成したサービスプリンシパル(Azure管理画面上ではエンタープライズアプリケーションとして扱われます)に、本番用AI Foundryに対する `Azure AI User` ロールと `Cognitive Services 共同作成者` を割り当ててください。
+また、リソースグループに対する `共同作成者` ロールも割り当ててください。
+
 ![](/docs/role-assignment.png)
 
 #### リポジトリのシークレットと変数の設定
@@ -215,25 +217,38 @@ Azure Functionsの環境変数に以下の値を設定します。
 | AZURE_TENANT_ID       | GitHub Actions用のエンタープライズアプリケーションが含まれているテナントのID |
 | AZURE_CLIENT_ID       | GitHub Actions用のエンタープライズアプリケーションのID                       |
 
-リポジトリの構成変数に、mainへのマージ時にエージェントをデプロイする(=本番用の)AI Foundryのアカウント名を設定してください。
+リポジトリの構成変数に、mainへのマージ時にエージェントをデプロイする(=本番用の)AI Foundryのアカウント名とリソースグループ名を設定してください。
 
 | 変数名                 | 概要                     |
 | ---------------------- | ------------------------ |
 | AIFOUNDRY_ACCOUNT_NAME | AI Foundryのアカウント名 |
 | RESOURCE_GROUP_NAME    | リソースグループ名       |
 
+![](/docs/githubactions-vars.png)
+
 ## テスト
 
-`detect-agent-publish` を起動することでパイプラインの挙動をテストすることができます。
+### アラート発報からPR作成までのテスト
 
-.envにURLとキーを記載し、[trigger.sh](/azure/functions/test-scripts/upload-agent-to-github/trigger.sh)を実行してください。
+.envに `detect-agent-publish` のURLとキーを記載し、[trigger.sh](/azure/functions/test-scripts/upload-agent-to-github/trigger.sh)を実行すると、アラートが発報し、PR作成までの処理が起動します。
+GitHub上でワークフローが起動し、PR作成が確認できたら成功です。
 
 ```
 cd azure/functions/test-scripts/upload-agent-to-github
 bash trigger.sh
 ```
 
-GitHub上でワークフローが起動し、PR作成が確認できたら成功です。
+### E2Eテスト
+
+開発用のAI Foundryのプロジェクトでエージェントを新規作成・発行すると、アラート発報・Azure Functions起動・GitHub Actions起動を経てPRが作成されます。
+
+![](/docs/aifoundry-dev-publish.png)
+
+![](/docs/auto-generated-pr.png)
+
+PRがマージされると、GitHub Actionsのワークフローが起動し、本番用のAI Foundryの `prod` プロジェクトに同名のエージェントが作成・発行されます。
+
+![]()
 
 ## 設計上のポイント
 
