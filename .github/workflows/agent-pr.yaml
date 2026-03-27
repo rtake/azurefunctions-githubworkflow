@@ -20,8 +20,9 @@ on:
         type: string
         description: "Base64-encoded JSON string of the agent definition"
 
+# 1つのエージェントに対して複数のPRが同時に存在しないようにする
 concurrency:
-  group: agent-pr-${{ github.event.inputs.project_name }}-${{ github.event.inputs.app_name }}-${{ github.event.inputs.deployment_name }}
+  group: agent-pr-${{ github.event.inputs.project_name }}-${{ github.event.inputs.app_name }}
   cancel-in-progress: false
 
 permissions:
