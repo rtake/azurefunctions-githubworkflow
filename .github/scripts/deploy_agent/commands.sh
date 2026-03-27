@@ -63,7 +63,7 @@ collect_agents() {
     agent_id=$(require_json_field "$agent_response" '.id' "Failed to resolve agent id")
     agent_version=$(require_json_field "$agent_response" '.versions.latest.version' "Failed to resolve agent version")
     safe_agent_version=$(printf '%s' "$agent_version" | tr -c '[:alnum:]-' '-')
-    deployment_name="${configured_deployment_name}-v-${safe_agent_version}"
+    deployment_name="${agent_name}-v-${safe_agent_version}"
 
     agent_state=$(build_agent_state \
       "$agent_name" \
