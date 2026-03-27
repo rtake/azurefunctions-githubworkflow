@@ -1,0 +1,10 @@
+{
+  "kind": "prompt",
+  "model": "gpt-4o",
+  "instructions": "",
+  "tools": [
+    {
+      "type": "web_search"
+    }
+  ]
+}
