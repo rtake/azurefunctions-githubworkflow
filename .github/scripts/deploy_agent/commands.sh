@@ -66,8 +66,6 @@ collect_agents() {
     app_name="$agent_name"
     deployment_name="${agent_name}-v-${safe_agent_version}"
 
-    echo "==== collect_agents ==== model_version: ${model_version}"
-
     agent_state=$(build_agent_state \
       "$agent_name" \
       "$agent_file" \
