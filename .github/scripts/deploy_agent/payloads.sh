@@ -124,7 +124,7 @@ build_agent_state() {
   local model_deployment_name="$7"
   local model_name="$8"
   local model_format="$9"
-  local model_version="$10"
+  local model_version="${10}"
   local model_publisher="${11}"
   local sku_name="${12}"
   local sku_capacity="${13}"
