@@ -6,6 +6,7 @@ on:
       - main
       - feature/*
       - check/*
+      - fix/*
 
 permissions:
   id-token: write
