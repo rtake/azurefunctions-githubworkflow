@@ -20,12 +20,12 @@ arm_base_url() {
 
 application_url() {
   local app_name="$1"
-  printf '%s/applications/%s?api-version=%s' "$(arm_base_url)" "$app_name"
+  printf '%s/applications/%s?api-version=2025-10-01-preview' "$(arm_base_url)" "$app_name"
 }
 
 deployment_url() {
   local app_name="$1"
-  printf '%s/applications/%s/agentDeployments/%s?api-version=%s' "$(arm_base_url)" "$app_name" "$app_name"
+  printf '%s/applications/%s/agentDeployments/%s?api-version=2025-10-01-preview' "$(arm_base_url)" "$app_name" "$app_name"
 }
 
 fallback_deployment_id() {
