@@ -132,6 +132,8 @@ build_agent_state() {
   local service_tier="${15}"
   local version_upgrade_option="${16}"
 
+  echo "==== build_agent_state ==== model_version: ${model_version}"
+
   jq -c -n \
     --arg agentName "$agent_name" \
     --arg agentFile "$agent_file" \
