@@ -103,6 +103,7 @@ jobs:
         if: steps.changes.outputs.deploy_files != ''
         env:
           AGENTS: ${{ steps.agents.outputs.agents }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
           bash .github/scripts/deploy_agent/run.sh deploy-models
 
