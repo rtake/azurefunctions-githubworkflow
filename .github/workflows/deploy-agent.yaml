@@ -35,6 +35,7 @@ jobs:
       - name: Detect changed agents
         id: changes
         run: |
+          # ToDo: 最初のコミットの時に変更検知ができないバグを修正
           CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep '^agents/.*\.json$' || true)
 
           {
@@ -64,7 +65,7 @@ jobs:
         if: steps.changes.outputs.files != ''
         env:
           FOUNDRY_TOKEN: ${{ steps.foundry_token.outputs.token }}
-          FILES: ${{ steps.changes.outputs.files }}
+          CHANGED_AGENT_FILES: ${{ steps.changes.outputs.files }}
         run: |
           set -euo pipefail
 
@@ -78,6 +79,8 @@ jobs:
 
             echo "=== Processing ${AGENT_NAME} ==="
 
+            # レスポンスボディの末尾にステータスコードを付与
+            # ToDo: 可読性が下がるため本文とステータスを分けて取る方法に変更
             GET_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1"
             GET_RESPONSE=$(curl --silent --show-error \
               -w "%{http_code}" \
@@ -86,6 +89,7 @@ jobs:
             STATUS="${GET_RESPONSE: -3}"
             AGENT_RESPONSE="${GET_RESPONSE%???}"
 
+            # ToDo: 存在しない場合だけ処理する
             if [ "$STATUS" = "404" ]; then
               echo "Creating agent ${PROJECT_NAME}/${AGENT_NAME}"
 
@@ -116,14 +120,15 @@ jobs:
                   definition: $def[0]
                 }')
 
-              AGENT_RESPONSE=$(
-                curl --fail-with-body --silent --show-error \
-                -X POST \
-                "$UPDATE_URL" \
-                -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
-                -H "Content-Type: application/json" \
-                -d "$UPDATE_BODY"
-              )
+              # エージェントがすでに存在する場合には処理不要
+              # AGENT_RESPONSE=$(
+              #   curl --fail-with-body --silent --show-error \
+              #   -X POST \
+              #   "$UPDATE_URL" \
+              #   -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
+              #   -H "Content-Type: application/json" \
+              #   -d "$UPDATE_BODY"
+              # )
             else
               echo "Failed to check existing agent ${PROJECT_NAME}/${AGENT_NAME}: HTTP ${STATUS}"
               [ -n "$AGENT_RESPONSE" ] && echo "$AGENT_RESPONSE"
@@ -165,7 +170,7 @@ jobs:
               --argjson item "$AGENT_STATE" \
               '. + [$item]' \
               <<< "$AGENTS_JSON")
-          done <<< "$FILES"
+          done <<< "$CHANGED_AGENT_FILES"
 
           {
             echo "agents<<EOF"
