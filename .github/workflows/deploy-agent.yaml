@@ -100,14 +100,12 @@ jobs:
           URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/deployments/${MODEL_NAME}?api-version=${API_VERSION}"
 
           BODY=$(jq -n \
-            --arg agentName "$AGENT_NAME" \
-            --arg agentVersion "$AGENT_VERSION" \
-            --arg displayName "${AGENT_NAME} deployment" \
+            --arg modelName "$MODEL_NAME" \
             '{
               properties: {
                 deploymentState: "Running",
                 model: {
-                  name: "${MODEL_NAME}",
+                  name: $modelName,
                   format: "OpenAI",
                 },
                 serviceTier: "Priority"
