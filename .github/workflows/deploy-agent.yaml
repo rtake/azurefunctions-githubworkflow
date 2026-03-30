@@ -295,7 +295,7 @@ jobs:
 
           {
             echo "deployment<<EOF"
-            echo $DEPLOYMENT_ID
+            echo $DEPLOYMENT
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
