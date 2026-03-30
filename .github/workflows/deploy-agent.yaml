@@ -130,7 +130,7 @@ jobs:
                   definition: $def[0]
                 }')
               CREATE_VERSION_RESPONSE=$(
-                curl --fail-with-body --silent --show-error \
+                curl  \
                 -X POST \
                 "$CREATE_VERSION_URL" \
                 -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
