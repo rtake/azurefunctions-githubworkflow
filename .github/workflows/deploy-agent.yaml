@@ -32,17 +32,28 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Detect changed agents
+      - name: Detect changed agent
         id: changes
         run: |
+          set -euo pipefail
+
           # ToDo: 最初のコミットの時に変更検知ができないバグを修正
           CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep '^agents/.*\.json$' || true)
+          COUNT=$(printf '%s\n' "$CHANGED" | sed '/^$/d' | wc -l | tr -d ' ')
 
-          {
-            echo "files<<EOF"
-            echo "$CHANGED"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "file=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$COUNT" -gt 1 ]; then
+            echo "Single-agent workflow expects exactly one changed agent file."
+            printf '%s\n' "$CHANGED"
+            exit 1
+          fi
+
+          AGENT_FILE=$(printf '%s\n' "$CHANGED" | sed '/^$/d' | head -n1)
+          echo "file=$AGENT_FILE" >> "$GITHUB_OUTPUT"
 
       - name: Get Foundry token
         id: foundry_token
@@ -60,294 +71,235 @@ jobs:
             --query accessToken -o tsv)
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
 
-      - name: Create or update changed agents
-        id: agents
-        if: steps.changes.outputs.files != ''
+      - name: Create or update agent and create version
+        id: agent
+        if: steps.changes.outputs.file != ''
         env:
           FOUNDRY_TOKEN: ${{ steps.foundry_token.outputs.token }}
-          CHANGED_AGENT_FILES: ${{ steps.changes.outputs.files }}
+          AGENT_FILE: ${{ steps.changes.outputs.file }}
         run: |
           set -euo pipefail
 
           BASE_URL="https://${AIFOUNDRY_ACCOUNT_NAME}.services.ai.azure.com"
-          AGENTS_JSON=$(jq -cn '[]')
+          AGENT_NAME=$(basename "$AGENT_FILE" .json)
 
-          while IFS= read -r f; do
-            [ -z "$f" ] && continue
+          echo "=== Processing ${AGENT_NAME} ==="
 
-            AGENT_NAME=$(basename "$f" .json)
-            APP_NAME="${AGENT_NAME}"
+          # レスポンスボディの末尾にステータスコードを付与
+          # ToDo: 可読性が下がるため本文とステータスを分けて取る方法に変更
+          GET_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1"
+          GET_RESPONSE=$(curl --silent --show-error \
+            -w "%{http_code}" \
+            -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
+            "$GET_URL" || true)
+          STATUS="${GET_RESPONSE: -3}"
+          AGENT_RESPONSE="${GET_RESPONSE%???}"
 
-            echo "=== Processing ${AGENT_NAME} ==="
+          if [ "$STATUS" = "404" ]; then
+            echo "Creating agent ${PROJECT_NAME}/${AGENT_NAME}"
 
-            # レスポンスボディの末尾にステータスコードを付与
-            # ToDo: 可読性が下がるため本文とステータスを分けて取る方法に変更
-            GET_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1"
-            GET_RESPONSE=$(curl --silent --show-error \
-              -w "%{http_code}" \
-              -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
-              "$GET_URL" || true)
-            STATUS="${GET_RESPONSE: -3}"
-            AGENT_RESPONSE="${GET_RESPONSE%???}"
+            CREATE_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents?api-version=v1"
+            CREATE_BODY=$(jq -n \
+              --arg name "$AGENT_NAME" \
+              --slurpfile def "$AGENT_FILE" \
+              '{
+                name: $name,
+                definition: $def[0]
+              }')
 
-            # ToDo: 存在しない場合だけ処理する
-            if [ "$STATUS" = "404" ]; then
-              echo "Creating agent ${PROJECT_NAME}/${AGENT_NAME}"
-
-              CREATE_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents?api-version=v1"
-              CREATE_BODY=$(jq -n \
-                --arg name "$AGENT_NAME" \
-                --slurpfile def "$f" \
-                '{
-                  name: $name,
-                  definition: $def[0]
-                }')
-
-              AGENT_RESPONSE=$(
-                curl --fail-with-body --silent --show-error \
+            AGENT_RESPONSE=$(
+              curl --fail-with-body --silent --show-error \
                 -X POST \
                 "$CREATE_URL" \
                 -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
                 -H "Content-Type: application/json" \
                 -d "$CREATE_BODY"
-              )
-            elif [ "$STATUS" = "200" ]; then
-              echo "Updating agent ${PROJECT_NAME}/${AGENT_NAME}"
+            )
 
-              UPDATE_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1"
-              UPDATE_BODY=$(jq -n \
-                --slurpfile def "$f" \
-                '{
-                  definition: $def[0]
-                }')
+          fi
 
-              # エージェントがすでに存在する場合には処理不要
-              # AGENT_RESPONSE=$(
-              #   curl --fail-with-body --silent --show-error \
-              #   -X POST \
-              #   "$UPDATE_URL" \
-              #   -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
-              #   -H "Content-Type: application/json" \
-              #   -d "$UPDATE_BODY"
-              # )
-            else
-              echo "Failed to check existing agent ${PROJECT_NAME}/${AGENT_NAME}: HTTP ${STATUS}"
-              [ -n "$AGENT_RESPONSE" ] && echo "$AGENT_RESPONSE"
-              exit 1
-            fi
+          echo "Agent response: $AGENT_RESPONSE"
 
-            echo "Agent response: $AGENT_RESPONSE"
+          CREATE_VERSION_BODY=$(jq -n \
+            --slurpfile def "$AGENT_FILE" \
+            '{
+              definition: $def[0]
+            }')
 
-            # エージェントのバージョンを作成 (https://learn.microsoft.com/ja-jp/rest/api/aifoundry/aiproject?view=rest-aifoundry-accountmanagement-2025-10-01-preview#agents---create-agent-version)
-            CREATE_VERSION_BODY=$(jq -n \
-              --slurpfile def "$f" \
-              '{
-                definition: $def[0]
-              }')
-            CREATE_VERSION_RESPONSE=$(
-              curl --fail-with-body --silent --show-error \
+          CREATE_VERSION_RESPONSE=$(
+            curl --fail-with-body --silent --show-error \
               -X POST \
               "${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}/versions?api-version=v1" \
               -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
               -H "Content-Type: application/json" \
               -d "$CREATE_VERSION_BODY"
-            )
-            echo "Agent version response: $CREATE_VERSION_RESPONSE"
+          )
 
-            AGENT_ID=$(jq -r '.id' <<< "$CREATE_VERSION_RESPONSE")
-            AGENT_VERSION=$(jq -c -n \
-              --arg agentName "$AGENT_NAME" \
-              --arg agentId "$AGENT_ID" \
-              --arg appName "$APP_NAME" \
-              '{
-                agentName: $agentName,
-                agentId: $agentId,
-                appName: $appName,
-              }')
+          echo "Agent version response: $CREATE_VERSION_RESPONSE"
 
-            AGENTS_JSON=$(jq -c \
-              --argjson item "$AGENT_VERSION" \
-              '. + [$item]' \
-              <<< "$AGENTS_JSON")
-          done <<< "$CHANGED_AGENT_FILES"
+          AGENT_ID=$(jq -r '.id // .agentId // empty' <<< "$AGENT_RESPONSE")
+          AGENT_VERSION=$(jq -r '.version // .versions.latest.version // empty' <<< "$CREATE_VERSION_RESPONSE")
+
+          if [ -z "$AGENT_ID" ] || [ "$AGENT_ID" = "null" ] || [ -z "$AGENT_VERSION" ] || [ "$AGENT_VERSION" = "null" ]; then
+            echo "Failed to resolve agent id/version"
+            echo "$AGENT_RESPONSE"
+            echo "$CREATE_VERSION_RESPONSE"
+            exit 1
+          fi
+
+          AGENT_STATE=$(jq -c -n \
+            --arg agentName "$AGENT_NAME" \
+            --arg agentId "$AGENT_ID" \
+            --arg agentVersion "$AGENT_VERSION" \
+            --arg appName "$AGENT_NAME" \
+            '{
+              agentName: $agentName,
+              agentId: $agentId,
+              agentVersion: $agentVersion,
+              appName: $appName
+            }')
 
           {
-            echo "agents<<EOF"
-            echo "$AGENTS_JSON"
+            echo "agent<<EOF"
+            echo "$AGENT_STATE"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Update applications to refer the uploaded agents
-        if: steps.changes.outputs.files != ''
+      - name: Create or update deployment for the uploaded agent
+        id: deployment
+        if: steps.agent.outputs.agent != ''
         env:
           ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
-          AGENTS: ${{ steps.agents.outputs.agents }}
+          AGENT: ${{ steps.agent.outputs.agent }}
         run: |
           set -euo pipefail
 
-          while IFS= read -r agent; do
-            AGENT_NAME=$(jq -r '.agentName' <<< "$agent")
-            AGENT_ID=$(jq -r '.agentId' <<< "$agent")
-            APP_NAME=$(jq -r '.appName' <<< "$agent")
-            APP_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}?api-version=${API_VERSION}"
+          BASE_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}"
+          AGENT_NAME=$(jq -r '.agentName' <<< "$AGENT")
+          AGENT_VERSION=$(jq -r '.agentVersion' <<< "$AGENT")
+          APP_NAME=$(jq -r '.appName' <<< "$AGENT")
 
-            echo "=== Creating or updating application ${APP_NAME} ==="
+          DEPLOYMENT_NAME="default"
+          DEPLOY_URL="${BASE_URL}/applications/${APP_NAME}/agentDeployments/${DEPLOYMENT_NAME}?api-version=${API_VERSION}"
 
-            APP_BODY=$(jq -n \
-              --arg displayName "$AGENT_NAME" \
-              --arg description "Published agent application for ${AGENT_NAME}" \
-              --arg agentId "$AGENT_ID" \
-              --arg agentName "$AGENT_NAME" \
-              '{
-                properties: {
-                  agents: [
-                    {
-                      agentId: $agentId,
-                      agentName: $agentName
-                    }
-                  ],
-                  displayName: $displayName,
-                  description: $description
-                }
-              }')
+          echo "=== Creating or updating deployment ${APP_NAME}/${DEPLOYMENT_NAME} ==="
 
-            APP_RESPONSE=$(
-              curl --fail-with-body --silent --show-error \
-                -X PUT \
-                "$APP_URL" \
-                -H "Authorization: Bearer ${ARM_TOKEN}" \
-                -H "Content-Type: application/json" \
-                -d "$APP_BODY"
-            )
-
-            echo "Application response: $APP_RESPONSE"
-          done < <(jq -c '.[]' <<< "$AGENTS")
-
-      - name: Create new deployments for the uploaded agents
-        id: deployments
-        if: steps.changes.outputs.files != ''
-        env:
-          ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
-          AGENTS: ${{ steps.agents.outputs.agents }}
-        run: |
-          set -euo pipefail
-
-          DEPLOYED_AGENTS_JSON=$(jq -cn '[]')
-
-          while IFS= read -r agent; do
-            AGENT_NAME=$(jq -r '.agentName' <<< "$agent")
-            AGENT_VERSION=$(jq -r '.agentVersion' <<< "$agent")
-            APP_NAME=$(jq -r '.appName' <<< "$agent")
-
-            DEPLOYMENT_NAME="$APP_NAME-$AGENT_VERSION"
-            DEPLOY_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}/agentDeployments/${DEPLOYMENT_NAME}?api-version=${API_VERSION}"
-            echo "DEPLOY_URL $DEPLOY_URL"
-
-            DEPLOY_BODY=$(jq -n \
-              --arg agentName "$AGENT_NAME" \
-              --arg agentVersion "$AGENT_VERSION" \
-              --arg displayName "${AGENT_NAME} deployment" \
-              '{
-                properties: {
-                  agents: [
-                    {
-                      agentName: $agentName,
-                      agentVersion: $agentVersion
-                    }
-                  ],
-                  deploymentType: "Managed",
-                  displayName: $displayName,
-                  protocols: [
-                    {
-                      protocol: "Responses",
-                      version: "1.0"
-                    }
-                  ],
-                  state: "Starting"
-                }
-              }')
-            DEPLOY_RESPONSE=$(
-              curl --fail-with-body --silent --show-error \
-                -X PUT \
-                "$DEPLOY_URL" \
-                -H "Authorization: Bearer ${ARM_TOKEN}" \
-                -H "Content-Type: application/json" \
-                -d "$DEPLOY_BODY"
-            )
-
-            echo "Deployment response: $DEPLOY_RESPONSE"
-
-            DEPLOYMENT_ID=$(jq -r '.properties.deploymentId' <<< "$DEPLOY_RESPONSE")
-            if [ -z "$DEPLOYMENT_ID" ] || [ "$DEPLOYMENT_ID" = "null" ]; then
-              DEPLOYMENT_ID=""
-            fi
-          done < <(jq -c '.[]' <<< "$AGENTS")
-
-          {
-            echo "agents<<EOF"
-            echo "$DEPLOYMENT_ID"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Link deployments to applications
-        if: steps.changes.outputs.files != ''
-        env:
-          ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
-          AGENTS: ${{ steps.agents.outputs.agents }}
-          DEPLOYMENTS: ${{ steps.deployments.outputs.agents }}
-        run: |
-          set -euo pipefail
-
-          while IFS= read -r agent; do
-            AGENT_NAME=$(jq -r '.agentName' <<< "$agent")
-            AGENT_ID=$(jq -r '.agentId' <<< "$agent")
-            APP_NAME=$(jq -r '.appName' <<< "$agent")
-            DEPLOYMENT_ID=$(jq -r '.deploymentId' <<< "$agent")
-            APP_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}?api-version=${API_VERSION}"
-
-            echo "=== Linking deployment for ${APP_NAME} ==="
-
-            APP_LINK_BODY=$(jq -n \
-              --arg displayName "$AGENT_NAME" \
-              --arg description "Published agent application for ${AGENT_NAME}" \
-              --arg agentId "$AGENT_ID" \
-              --arg agentName "$AGENT_NAME" \
-              --arg deploymentId "$DEPLOYMENT_ID" \
-              '{
-                properties: {
-                  agents: [
-                    {
-                      agentId: $agentId,
-                      agentName: $agentName
-                    }
-                  ],
-                  displayName: $displayName,
-                  description: $description,
-                  authorizationPolicy: {
-                    authorizationScheme: "Default"
-                  },
-                  trafficRoutingPolicy: {
-                    protocol: "FixedRatio",
-                    rules: [
-                      {
-                        ruleId: "default",
-                        description: "Default rule routing all traffic to the first deployment",
-                        deploymentId: $deploymentId,
-                        trafficPercentage: 100
-                      }
-                    ]
+          DEPLOY_BODY=$(jq -n \
+            --arg agentName "$AGENT_NAME" \
+            --arg agentVersion "$AGENT_VERSION" \
+            --arg displayName "${AGENT_NAME} deployment" \
+            '{
+              properties: {
+                agents: [
+                  {
+                    agentName: $agentName,
+                    agentVersion: $agentVersion
                   }
+                ],
+                deploymentType: "Managed",
+                displayName: $displayName,
+                protocols: [
+                  {
+                    protocol: "Responses",
+                    version: "1.0"
+                  }
+                ],
+                state: "Starting"
+              }
+            }')
+
+          DEPLOY_RESPONSE=$(
+            curl --fail-with-body --silent --show-error \
+              -X PUT \
+              "$DEPLOY_URL" \
+              -H "Authorization: Bearer ${ARM_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$DEPLOY_BODY"
+          )
+
+          echo "Deployment response: $DEPLOY_RESPONSE"
+
+          DEPLOYMENT_ID=$(jq -r '.properties.deploymentId // empty' <<< "$DEPLOY_RESPONSE")
+          if [ -z "$DEPLOYMENT_ID" ] || [ "$DEPLOYMENT_ID" = "null" ]; then
+            echo "Failed to resolve deployment id"
+            echo "$DEPLOY_RESPONSE"
+            exit 1
+          fi
+
+          DEPLOYMENT_STATE=$(jq -c -n \
+            --arg deploymentId "$DEPLOYMENT_ID" \
+            --arg deploymentName "$DEPLOYMENT_NAME" \
+            --arg appName "$APP_NAME" \
+            '{
+              deploymentId: $deploymentId,
+              deploymentName: $deploymentName,
+              appName: $appName
+            }')
+
+          {
+            echo "deployment<<EOF"
+            echo "$DEPLOYMENT_STATE"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Update application to refer the uploaded agent and deployment
+        if: steps.agent.outputs.agent != ''
+        env:
+          ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
+          AGENT: ${{ steps.agent.outputs.agent }}
+          DEPLOYMENT: ${{ steps.deployment.outputs.deployment }}
+        run: |
+          set -euo pipefail
+
+          AGENT_NAME=$(jq -r '.agentName' <<< "$AGENT")
+          AGENT_ID=$(jq -r '.agentId' <<< "$AGENT")
+          APP_NAME=$(jq -r '.appName' <<< "$AGENT")
+          DEPLOYMENT_ID=$(jq -r '.deploymentId' <<< "$DEPLOYMENT")
+
+          APP_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}?api-version=${API_VERSION}"
+
+          echo "=== Creating or updating application ${APP_NAME} ==="
+
+          APP_BODY=$(jq -n \
+            --arg displayName "$AGENT_NAME" \
+            --arg description "Published agent application for ${AGENT_NAME}" \
+            --arg agentId "$AGENT_ID" \
+            --arg agentName "$AGENT_NAME" \
+            --arg deploymentId "$DEPLOYMENT_ID" \
+            '{
+              properties: {
+                agents: [
+                  {
+                    agentId: $agentId,
+                    agentName: $agentName
+                  }
+                ],
+                displayName: $displayName,
+                description: $description,
+                authorizationPolicy: {
+                  authorizationScheme: "Default"
+                },
+                trafficRoutingPolicy: {
+                  protocol: "FixedRatio",
+                  rules: [
+                    {
+                      ruleId: "default",
+                      description: "Default rule routing all traffic to the active deployment",
+                      deploymentId: $deploymentId,
+                      trafficPercentage: 100
+                    }
+                  ]
                 }
-              }')
+              }
+            }')
 
-            APP_LINK_RESPONSE=$(
-              curl --fail-with-body --silent --show-error \
-                -X PUT \
-                "$APP_URL" \
-                -H "Authorization: Bearer ${ARM_TOKEN}" \
-                -H "Content-Type: application/json" \
-                -d "$APP_LINK_BODY"
-            )
+          APP_RESPONSE=$(
+            curl --fail-with-body --silent --show-error \
+              -X PUT \
+              "$APP_URL" \
+              -H "Authorization: Bearer ${ARM_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$APP_BODY"
+          )
 
-            echo "Application link response: $APP_LINK_RESPONSE"
-          done < <(jq -c '.[]' <<< "$AGENTS")
+          echo "Application response: $APP_RESPONSE"
