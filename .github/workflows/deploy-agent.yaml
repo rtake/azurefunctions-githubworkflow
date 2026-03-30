@@ -287,12 +287,15 @@ jobs:
 
           DEPLOYMENT_ID=$(jq -r '.properties.deploymentId' <<< "$DEPLOY_RESPONSE")
 
+          DEPLOYMENT=$(jq -c -n \
+            --arg deploymentId "$DEPLOYMENT_ID" \
+            '{
+              deploymentId: $deploymentId
+            }')
+
           {
             echo "deployment<<EOF"
-              $(jq -c -n --arg deploymentId "$DEPLOYMENT_ID" \
-                '{
-                  deploymentId: $deploymentId
-                }')
+            echo $DEPLOYMENT_ID
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
