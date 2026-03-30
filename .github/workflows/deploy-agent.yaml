@@ -305,6 +305,8 @@ jobs:
         run: |
           set -euo pipefail
 
+          echo "DEPLOYMENT $DEPLOYMENT"
+
           AGENT_NAME=$(jq -r '.agentName' <<< "$AGENT")
           AGENT_ID=$(jq -r '.agentId' <<< "$AGENT")
           APP_NAME=$(jq -r '.appName' <<< "$AGENT")
