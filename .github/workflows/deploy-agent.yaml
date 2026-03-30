@@ -223,7 +223,7 @@ jobs:
             echo "Application response: $APP_RESPONSE"
           done < <(jq -c '.[]' <<< "$AGENTS")
 
-      - name: Create deployments
+      - name: Create new deployments for the uploaded agents
         id: deployments
         if: steps.changes.outputs.files != ''
         env:
@@ -238,10 +238,9 @@ jobs:
             AGENT_NAME=$(jq -r '.agentName' <<< "$agent")
             AGENT_VERSION=$(jq -r '.agentVersion' <<< "$agent")
             APP_NAME=$(jq -r '.appName' <<< "$agent")
-            DEPLOYMENT_NAME=$(jq -r '.deploymentName' <<< "$agent")
-            DEPLOY_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}/agentDeployments/${APP_NAME}?api-version=${API_VERSION}"
 
-            echo "=== Creating deployment for ${APP_NAME} ==="
+            DEPLOYMENT_NAME="$APP_NAME-$AGENT_VERSION"
+            DEPLOY_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}/agentDeployments/${APP_NAME}?api-version=${API_VERSION}"
 
             DEPLOY_BODY=$(jq -n \
               --arg agentName "$AGENT_NAME" \
@@ -266,7 +265,6 @@ jobs:
                   state: "Starting"
                 }
               }')
-
             DEPLOY_RESPONSE=$(
               curl --fail-with-body --silent --show-error \
                 -X PUT \
@@ -282,21 +280,11 @@ jobs:
             if [ -z "$DEPLOYMENT_ID" ] || [ "$DEPLOYMENT_ID" = "null" ]; then
               DEPLOYMENT_ID="/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}/agentDeployments/${DEPLOYMENT_NAME}"
             fi
-
-            DEPLOYED_AGENT=$(jq -c \
-              --arg deploymentId "$DEPLOYMENT_ID" \
-              '. + { deploymentId: $deploymentId }' \
-              <<< "$agent")
-
-            DEPLOYED_AGENTS_JSON=$(jq -c \
-              --argjson item "$DEPLOYED_AGENT" \
-              '. + [$item]' \
-              <<< "$DEPLOYED_AGENTS_JSON")
           done < <(jq -c '.[]' <<< "$AGENTS")
 
           {
             echo "agents<<EOF"
-            echo "$DEPLOYED_AGENTS_JSON"
+            echo "$DEPLOYMENT_ID"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -304,7 +292,8 @@ jobs:
         if: steps.changes.outputs.files != ''
         env:
           ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
-          AGENTS: ${{ steps.deployments.outputs.agents }}
+          AGENTS: ${{ steps.agents.outputs.agents }}
+          DEPLOYMENTS: ${{ steps.deployments.outputs.agents }}
         run: |
           set -euo pipefail
 
