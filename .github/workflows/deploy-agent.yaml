@@ -95,6 +95,8 @@ jobs:
           STATUS="${GET_RESPONSE: -3}"
           AGENT_RESPONSE="${GET_RESPONSE%???}"
 
+          echo "GET_RESPONSE $GET_RESPONSE"
+
           if [ "$STATUS" = "404" ]; then
             echo "Creating agent ${PROJECT_NAME}/${AGENT_NAME}"
 
@@ -137,7 +139,7 @@ jobs:
 
           echo "Agent version response: $CREATE_VERSION_RESPONSE"
 
-          AGENT_ID=$(jq -r '.id // .agentId // empty' <<< "$AGENT_RESPONSE")
+          AGENT_ID=$(jq -r '.id // .agentId // empty' <<< "$CREATE_VERSION_RESPONSE")
           AGENT_VERSION=$(jq -r '.version // .versions.latest.version // empty' <<< "$CREATE_VERSION_RESPONSE")
 
           if [ -z "$AGENT_ID" ] || [ "$AGENT_ID" = "null" ] || [ -z "$AGENT_VERSION" ] || [ "$AGENT_VERSION" = "null" ]; then
