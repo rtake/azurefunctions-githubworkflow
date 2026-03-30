@@ -102,13 +102,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          BASE_URL="https://${AIFOUNDRY_ACCOUNT_NAME}.services.ai.azure.com"
+          AIFOUNDRY_BASE_URL="https://${AIFOUNDRY_ACCOUNT_NAME}.services.ai.azure.com"
 
           AGENT_NAME=$(basename "$FILE" .json)
 
           echo "=== Processing ${AGENT_NAME} ==="
 
-          GET_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1"
+          GET_URL="${AIFOUNDRY_BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1"
           GET_RESPONSE=$(curl --silent --show-error \
             -w "%{http_code}" \
             -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
@@ -118,9 +118,9 @@ jobs:
           AGENT_RESPONSE="${GET_RESPONSE%???}"
 
           if [ "$STATUS" = "404" ]; then
-            echo "Creating agent ${PROJECT_NAME}/${AGENT_NAME}"
+            echo "Creating new agent ${PROJECT_NAME}/${AGENT_NAME}"
 
-            CREATE_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents?api-version=v1"
+            CREATE_URL="${AIFOUNDRY_BASE_URL}/api/projects/${PROJECT_NAME}/agents?api-version=v1"
             CREATE_BODY=$(jq -n \
               --arg name "$AGENT_NAME" \
               --slurpfile def "$FILE" \
@@ -138,9 +138,9 @@ jobs:
                 -d "$CREATE_BODY"
             )
           elif [ "$STATUS" = "200" ]; then
-            echo "Updating agent ${PROJECT_NAME}/${AGENT_NAME}"
+            echo "Updating agent (create new agent version) ${PROJECT_NAME}/${AGENT_NAME}"
 
-            UPDATE_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1"
+            UPDATE_URL="${AIFOUNDRY_BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1"
             UPDATE_BODY=$(jq -n \
               --slurpfile def "$FILE" \
               '{
@@ -288,32 +288,27 @@ jobs:
 
           DEPLOYMENT_ID=$(jq -r '.properties.deploymentId' <<< "$DEPLOY_RESPONSE")
 
-          if [ -z "$DEPLOYMENT_ID" ] || [ "$DEPLOYMENT_ID" = "null" ]; then
-            DEPLOYMENT_ID="${DEPLOY_URL}"
-          fi
-
-          AGENT_WITH_DEPLOY=$(jq -c \
-            --arg deploymentId "$DEPLOYMENT_ID" \
-            '. + { deploymentId: $deploymentId }' \
-            <<< "$AGENT")
-
           {
-            echo "agent<<EOF"
-            echo "$AGENT_WITH_DEPLOY"
+            echo "deployment<<EOF"
+              jq -c --arg deploymentId "$DEPLOYMENT_ID" \
+                '{
+                  deploymentId: $deploymentId
+                }'
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Link deployment to application
+      - name: Update application to refer the new deployment
         env:
           ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
-          AGENT: ${{ steps.deployment.outputs.agent }}
+          AGENT: ${{ steps.agent.outputs.agent }}
+          DEPLOYMENT: ${{ steps.deployment.outputs.deployment }}
         run: |
           set -euo pipefail
 
           AGENT_NAME=$(jq -r '.agentName' <<< "$AGENT")
           AGENT_ID=$(jq -r '.agentId' <<< "$AGENT")
           APP_NAME=$(jq -r '.appName' <<< "$AGENT")
-          DEPLOYMENT_ID=$(jq -r '.deploymentId' <<< "$AGENT")
+          DEPLOYMENT_ID=$(jq -r '.deploymentId' <<< "$DEPLOYMENT")
 
           APP_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}?api-version=${API_VERSION}"
 
