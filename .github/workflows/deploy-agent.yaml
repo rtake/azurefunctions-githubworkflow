@@ -187,6 +187,8 @@ jobs:
 
           echo "=== Creating or updating deployment ${APP_NAME}/${DEPLOYMENT_NAME} ==="
 
+          sleep 60
+
           DEPLOY_BODY=$(jq -n \
             --arg agentName "$AGENT_NAME" \
             --arg agentVersion "$AGENT_VERSION" \
