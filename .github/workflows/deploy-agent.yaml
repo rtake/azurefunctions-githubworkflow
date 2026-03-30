@@ -32,16 +32,27 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Detect changed agents
+      - name: Detect changed agent
         id: changes
         run: |
-          CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep '^agents/.*\.json$' || true)
+          set -euo pipefail
 
-          {
-            echo "files<<EOF"
-            echo "$CHANGED"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep '^agents/.*\.json$' || true)
+          COUNT=$(printf '%s\n' "$CHANGED" | sed '/^$/d' | wc -l | tr -d ' ')
+
+          if [ "$COUNT" -eq 0 ]; then
+            echo "file=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$COUNT" -gt 1 ]; then
+            echo "Only one agent file is allowed"
+            printf '%s\n' "$CHANGED"
+            exit 1
+          fi
+
+          FILE=$(printf '%s\n' "$CHANGED" | sed '/^$/d' | head -n1)
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
 
       - name: Get Foundry token
         id: foundry_token
@@ -59,117 +70,99 @@ jobs:
             --query accessToken -o tsv)
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
 
-      - name: Create or update changed agents
-        id: agents
-        if: steps.changes.outputs.files != ''
+      - name: Create or update agent
+        id: agent
+        if: steps.changes.outputs.file != ''
         env:
           FOUNDRY_TOKEN: ${{ steps.foundry_token.outputs.token }}
-          FILES: ${{ steps.changes.outputs.files }}
+          FILE: ${{ steps.changes.outputs.file }}
         run: |
           set -euo pipefail
 
           BASE_URL="https://${AIFOUNDRY_ACCOUNT_NAME}.services.ai.azure.com"
-          AGENTS_JSON=$(jq -cn '[]')
 
-          while IFS= read -r f; do
-            [ -z "$f" ] && continue
+          AGENT_NAME=$(basename "$FILE" .json)
 
-            AGENT_NAME=$(basename "$f" .json)
+          echo "=== Processing ${AGENT_NAME} ==="
 
-            echo "=== Processing ${AGENT_NAME} ==="
+          GET_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1"
+          GET_RESPONSE=$(curl --silent --show-error \
+            -w "%{http_code}" \
+            -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
+            "$GET_URL" || true)
 
-            GET_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1"
-            GET_RESPONSE=$(curl --silent --show-error \
-              -w "%{http_code}" \
-              -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
-              "$GET_URL" || true)
-            STATUS="${GET_RESPONSE: -3}"
-            AGENT_RESPONSE="${GET_RESPONSE%???}"
+          STATUS="${GET_RESPONSE: -3}"
+          AGENT_RESPONSE="${GET_RESPONSE%???}"
 
-            if [ "$STATUS" = "404" ]; then
-              echo "Creating agent ${PROJECT_NAME}/${AGENT_NAME}"
+          if [ "$STATUS" = "404" ]; then
+            echo "Creating agent ${PROJECT_NAME}/${AGENT_NAME}"
 
-              CREATE_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents?api-version=v1"
-              CREATE_BODY=$(jq -n \
-                --arg name "$AGENT_NAME" \
-                --slurpfile def "$f" \
-                '{
-                  name: $name,
-                  definition: $def[0]
-                }')
+            CREATE_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents?api-version=v1"
+            CREATE_BODY=$(jq -n \
+              --arg name "$AGENT_NAME" \
+              --slurpfile def "$FILE" \
+              '{
+                name: $name,
+                definition: $def[0]
+              }')
 
-              AGENT_RESPONSE=$(
-                curl --fail-with-body --silent --show-error \
+            AGENT_RESPONSE=$(
+              curl --fail-with-body --silent --show-error \
                 -X POST \
                 "$CREATE_URL" \
                 -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
                 -H "Content-Type: application/json" \
                 -d "$CREATE_BODY"
-              )
-            elif [ "$STATUS" = "200" ]; then
-              echo "Updating agent ${PROJECT_NAME}/${AGENT_NAME}"
+            )
+          elif [ "$STATUS" = "200" ]; then
+            echo "Updating agent ${PROJECT_NAME}/${AGENT_NAME}"
 
-              UPDATE_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1"
-              UPDATE_BODY=$(jq -n \
-                --slurpfile def "$f" \
-                '{
-                  definition: $def[0]
-                }')
+            UPDATE_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}?api-version=v1"
+            UPDATE_BODY=$(jq -n \
+              --slurpfile def "$FILE" \
+              '{
+                definition: $def[0]
+              }')
 
-              AGENT_RESPONSE=$(
-                curl --fail-with-body --silent --show-error \
+            AGENT_RESPONSE=$(
+              curl --fail-with-body --silent --show-error \
                 -X POST \
                 "$UPDATE_URL" \
                 -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
                 -H "Content-Type: application/json" \
                 -d "$UPDATE_BODY"
-              )
-            else
-              echo "Failed to check existing agent ${PROJECT_NAME}/${AGENT_NAME}: HTTP ${STATUS}"
-              [ -n "$AGENT_RESPONSE" ] && echo "$AGENT_RESPONSE"
-              exit 1
-            fi
+            )
+          else
+            echo "Failed: HTTP ${STATUS}"
+            echo "$AGENT_RESPONSE"
+            exit 1
+          fi
 
-            echo "Agent response: $AGENT_RESPONSE"
+          echo "Agent response: $AGENT_RESPONSE"
 
-            AGENT_ID=$(jq -r '.id' <<< "$AGENT_RESPONSE")
-            AGENT_VERSION=$(jq -r '.versions.latest.version' <<< "$AGENT_RESPONSE")
+          AGENT_ID=$(jq -r '.id' <<< "$AGENT_RESPONSE")
+          AGENT_VERSION=$(jq -r '.versions.latest.version' <<< "$AGENT_RESPONSE")
 
-            if [ -z "$AGENT_ID" ] || [ "$AGENT_ID" = "null" ] || [ -z "$AGENT_VERSION" ] || [ "$AGENT_VERSION" = "null" ]; then
-              echo "Failed to resolve agent id/version"
-              echo "$AGENT_RESPONSE"
-              exit 1
-            fi
+          if [ -z "$AGENT_ID" ] || [ "$AGENT_ID" = "null" ] || [ -z "$AGENT_VERSION" ] || [ "$AGENT_VERSION" = "null" ]; then
+            echo "Failed to resolve agent id/version"
+            exit 1
+          fi
 
-            SAFE_AGENT_VERSION=$(printf '%s' "$AGENT_VERSION" | tr -c '[:alnum:]-' '-')
-            APP_NAME="${AGENT_NAME}"
-            DEPLOYMENT_NAME="v-${SAFE_AGENT_VERSION}"
-
-            AGENT_STATE=$(jq -c -n \
-              --arg agentName "$AGENT_NAME" \
-              --arg agentFile "$f" \
-              --arg agentId "$AGENT_ID" \
-              --arg agentVersion "$AGENT_VERSION" \
-              --arg appName "$APP_NAME" \
-              --arg deploymentName "$DEPLOYMENT_NAME" \
-              '{
-                agentName: $agentName,
-                agentFile: $agentFile,
-                agentId: $agentId,
-                agentVersion: $agentVersion,
-                appName: $appName,
-                deploymentName: $deploymentName
-              }')
-
-            AGENTS_JSON=$(jq -c \
-              --argjson item "$AGENT_STATE" \
-              '. + [$item]' \
-              <<< "$AGENTS_JSON")
-          done <<< "$FILES"
+          AGENT_STATE=$(jq -c -n \
+            --arg agentName "$AGENT_NAME" \
+            --arg agentId "$AGENT_ID" \
+            --arg agentVersion "$AGENT_VERSION" \
+            --arg appName "$AGENT_NAME" \
+            '{
+              agentName: $agentName,
+              agentId: $agentId,
+              agentVersion: $agentVersion,
+              appName: $appName
+            }')
 
           {
-            echo "agents<<EOF"
-            echo "$AGENTS_JSON"
+            echo "agent<<EOF"
+            echo "$AGENT_STATE"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
