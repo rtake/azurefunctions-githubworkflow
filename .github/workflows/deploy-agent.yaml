@@ -33,6 +33,19 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Get token
+        id: token
+        run: |
+          AIFOUNDRY_TOKEN=$(az account get-access-token \
+            --resource https://ai.azure.com \
+            --query accessToken -o tsv)
+          echo "aifoundry_token=$AIFOUNDRY_TOKEN" >> "$GITHUB_OUTPUT"
+
+          ARM_TOKEN=$(az account get-access-token \
+            --resource https://management.azure.com/ \
+            --query accessToken -o tsv)
+          echo "arm_token=$ARM_TOKEN" >> "$GITHUB_OUTPUT"
+
       - name: Detect changed agent
         id: changes
         run: |
@@ -77,27 +90,11 @@ jobs:
           echo "file=$FILE" >> "$GITHUB_OUTPUT"
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
 
-      - name: Get Foundry token
-        id: foundry_token
-        run: |
-          TOKEN=$(az account get-access-token \
-            --resource https://ai.azure.com \
-            --query accessToken -o tsv)
-          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-
-      - name: Get ARM token
-        id: arm_token
-        run: |
-          TOKEN=$(az account get-access-token \
-            --resource https://management.azure.com/ \
-            --query accessToken -o tsv)
-          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-
       - name: Create or update agent
         id: agent
         if: steps.changes.outputs.file != ''
         env:
-          FOUNDRY_TOKEN: ${{ steps.foundry_token.outputs.token }}
+          FOUNDRY_TOKEN: ${{ steps.token.outputs.aifoundry_token }}
           FILE: ${{ steps.changes.outputs.file }}
         run: |
           set -euo pipefail
@@ -191,7 +188,7 @@ jobs:
 
       - name: Create or update application
         env:
-          ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
+          ARM_TOKEN: ${{ steps.token.outputs.arm_token }}
           AGENT: ${{ steps.agent.outputs.agent }}
         run: |
           set -euo pipefail
@@ -236,7 +233,7 @@ jobs:
       - name: Create deployment
         id: deployment
         env:
-          ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
+          ARM_TOKEN: ${{ steps.token.outputs.arm_token }}
           AGENT: ${{ steps.agent.outputs.agent }}
         run: |
           set -euo pipefail
@@ -299,7 +296,7 @@ jobs:
 
       - name: Update application to refer the new deployment
         env:
-          ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
+          ARM_TOKEN: ${{ steps.token.outputs.arm_token }}
           AGENT: ${{ steps.agent.outputs.agent }}
           DEPLOYMENT: ${{ steps.deployment.outputs.deployment }}
         run: |
