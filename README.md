@@ -148,10 +148,6 @@ Azure Functionsの環境変数に以下の値を設定します。
 | QUEUE_CONNECTION_STRING | Queue storageの接続文字列                                                                         |
 | QUEUE_NAME              | 2つのAzure Functionsを接続するために使用するキューの名前 (このリポジトリでは `queue-agentdeploy`) |
 
-~~`upload-agent-from-queue` でAI Foundryにアクセスするためのロールが必要です。
-デプロイした Azure Functionsに、開発用AI Foundryに対する `Cognitive Serviceユーザー` ロールを割り当ててください。~~\
-`az deployment` で自動設定できるように修正中
-
 ### アラート設定
 
 アラートのアクショングループにデプロイした関数を追加します。
