@@ -179,7 +179,7 @@ jobs:
           AGENT_VERSION=$(jq -r '.agentVersion' <<< "$AGENT")
           APP_NAME=$(jq -r '.appName' <<< "$AGENT")
 
-          DEPLOYMENT_NAME="default"
+          DEPLOYMENT_NAME="$AGENT_NAME-$AGENT_VERSION"
           DEPLOY_URL="${BASE_URL}/applications/${APP_NAME}/agentDeployments/${DEPLOYMENT_NAME}?api-version=${API_VERSION}"
 
           echo "=== Creating or updating deployment ${APP_NAME}/${DEPLOYMENT_NAME} ==="
