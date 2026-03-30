@@ -76,6 +76,7 @@ jobs:
             [ -z "$f" ] && continue
 
             AGENT_NAME=$(basename "$f" .json)
+            APP_NAME="${AGENT_NAME}"
 
             echo "=== Processing ${AGENT_NAME} ==="
 
@@ -120,28 +121,6 @@ jobs:
                   definition: $def[0]
                 }')
 
-              # エージェントのバージョンを作成
-              # https://learn.microsoft.com/ja-jp/rest/api/aifoundry/aiproject?view=rest-aifoundry-accountmanagement-2025-10-01-preview#agents---create-agent-version
-
-              CREATE_VERSION_URL="${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}/versions?api-version=v1"
-              CREATE_VERSION_BODY=$(jq -n \
-                --slurpfile def "$f" \
-                '{
-                  definition: $def[0]
-                }')
-              CREATE_VERSION_RESPONSE=$(
-                curl  \
-                -X POST \
-                "$CREATE_VERSION_URL" \
-                -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
-                -H "Content-Type: application/json" \
-                -d "$CREATE_VERSION_BODY"
-              )
-
-              echo "Create version response: $CREATE_VERSION_RESPONSE"
-
-              AGENT_RESPONSE=CREATE_VERSION_RESPONSE
-
               # エージェントがすでに存在する場合には処理不要
               # AGENT_RESPONSE=$(
               #   curl --fail-with-body --silent --show-error \
@@ -159,37 +138,35 @@ jobs:
 
             echo "Agent response: $AGENT_RESPONSE"
 
-            AGENT_ID=$(jq -r '.id' <<< "$AGENT_RESPONSE")
-            AGENT_VERSION=$(jq -r '.versions.latest.version' <<< "$AGENT_RESPONSE")
+            # エージェントのバージョンを作成 (https://learn.microsoft.com/ja-jp/rest/api/aifoundry/aiproject?view=rest-aifoundry-accountmanagement-2025-10-01-preview#agents---create-agent-version)
+            CREATE_VERSION_BODY=$(jq -n \
+              --slurpfile def "$f" \
+              '{
+                definition: $def[0]
+              }')
+            CREATE_VERSION_RESPONSE=$(
+              curl --fail-with-body --silent --show-error \
+              -X POST \
+              "${BASE_URL}/api/projects/${PROJECT_NAME}/agents/${AGENT_NAME}/versions?api-version=v1" \
+              -H "Authorization: Bearer ${FOUNDRY_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$CREATE_VERSION_BODY"
+            )
+            echo "Agent version response: $CREATE_VERSION_RESPONSE"
 
-            if [ -z "$AGENT_ID" ] || [ "$AGENT_ID" = "null" ] || [ -z "$AGENT_VERSION" ] || [ "$AGENT_VERSION" = "null" ]; then
-              echo "Failed to resolve agent id/version"
-              echo "$AGENT_RESPONSE"
-              exit 1
-            fi
-
-            SAFE_AGENT_VERSION=$(printf '%s' "$AGENT_VERSION" | tr -c '[:alnum:]-' '-')
-            APP_NAME="${AGENT_NAME}"
-            DEPLOYMENT_NAME="v-${SAFE_AGENT_VERSION}"
-
-            AGENT_STATE=$(jq -c -n \
+            AGENT_ID=$(jq -r '.id' <<< "$CREATE_VERSION_RESPONSE")
+            AGENT_VERSION=$(jq -c -n \
               --arg agentName "$AGENT_NAME" \
-              --arg agentFile "$f" \
               --arg agentId "$AGENT_ID" \
-              --arg agentVersion "$AGENT_VERSION" \
               --arg appName "$APP_NAME" \
-              --arg deploymentName "$DEPLOYMENT_NAME" \
               '{
                 agentName: $agentName,
-                agentFile: $agentFile,
                 agentId: $agentId,
-                agentVersion: $agentVersion,
                 appName: $appName,
-                deploymentName: $deploymentName
               }')
 
             AGENTS_JSON=$(jq -c \
-              --argjson item "$AGENT_STATE" \
+              --argjson item "$AGENT_VERSION" \
               '. + [$item]' \
               <<< "$AGENTS_JSON")
           done <<< "$CHANGED_AGENT_FILES"
@@ -200,7 +177,7 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Create or update applications
+      - name: Update applications to refer the uploaded agents
         if: steps.changes.outputs.files != ''
         env:
           ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
