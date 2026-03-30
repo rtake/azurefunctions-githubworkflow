@@ -166,58 +166,55 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Create or update applications
-        if: steps.changes.outputs.files != ''
+      - name: Create or update application
         env:
           ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
-          AGENTS: ${{ steps.agents.outputs.agents }}
+          AGENT: ${{ steps.agent.outputs.agent }}
         run: |
           set -euo pipefail
 
-          while IFS= read -r agent; do
-            AGENT_NAME=$(jq -r '.agentName' <<< "$agent")
-            AGENT_ID=$(jq -r '.agentId' <<< "$agent")
-            APP_NAME=$(jq -r '.appName' <<< "$agent")
-            APP_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}?api-version=${API_VERSION}"
+          AGENT_NAME=$(jq -r '.agentName' <<< "$AGENT")
+          AGENT_ID=$(jq -r '.agentId' <<< "$AGENT")
+          APP_NAME=$(jq -r '.appName' <<< "$AGENT")
 
-            echo "=== Creating or updating application ${APP_NAME} ==="
+          APP_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}?api-version=${API_VERSION}"
 
-            APP_BODY=$(jq -n \
-              --arg displayName "$AGENT_NAME" \
-              --arg description "Published agent application for ${AGENT_NAME}" \
-              --arg agentId "$AGENT_ID" \
-              --arg agentName "$AGENT_NAME" \
-              '{
-                properties: {
-                  agents: [
-                    {
-                      agentId: $agentId,
-                      agentName: $agentName
-                    }
-                  ],
-                  displayName: $displayName,
-                  description: $description
-                }
-              }')
+          echo "=== Creating or updating application ${APP_NAME} ==="
 
-            APP_RESPONSE=$(
-              curl --fail-with-body --silent --show-error \
-                -X PUT \
-                "$APP_URL" \
-                -H "Authorization: Bearer ${ARM_TOKEN}" \
-                -H "Content-Type: application/json" \
-                -d "$APP_BODY"
-            )
+          APP_BODY=$(jq -n \
+            --arg displayName "$AGENT_NAME" \
+            --arg description "Published agent application for ${AGENT_NAME}" \
+            --arg agentId "$AGENT_ID" \
+            --arg agentName "$AGENT_NAME" \
+            '{
+              properties: {
+                agents: [
+                  {
+                    agentId: $agentId,
+                    agentName: $agentName
+                  }
+                ],
+                displayName: $displayName,
+                description: $description
+              }
+            }')
 
-            echo "Application response: $APP_RESPONSE"
-          done < <(jq -c '.[]' <<< "$AGENTS")
+          APP_RESPONSE=$(
+            curl --fail-with-body --silent --show-error \
+              -X PUT \
+              "$APP_URL" \
+              -H "Authorization: Bearer ${ARM_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$APP_BODY"
+          )
+
+          echo "Application response: $APP_RESPONSE"
 
       - name: Create deployments
         id: deployments
-        if: steps.changes.outputs.files != ''
         env:
           ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
-          AGENTS: ${{ steps.agents.outputs.agents }}
+          AGENTS: ${{ steps.agent.outputs.agent }}
         run: |
           set -euo pipefail
 
@@ -290,7 +287,6 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Link deployments to applications
-        if: steps.changes.outputs.files != ''
         env:
           ARM_TOKEN: ${{ steps.arm_token.outputs.token }}
           AGENTS: ${{ steps.deployments.outputs.agents }}
