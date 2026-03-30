@@ -28,7 +28,7 @@ var resourceToken = take(toLower(uniqueString(resourceGroup().id, location)), 6)
 var devAiFoundryAccountName = 'aif-${resourceToken}-dev'
 var cognitiveServicesUserRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
-  'a97b65f3-24c7-4388-baec-2e87135dc908'
+  'a97b65f3-24c7-4388-baec-2e87135dc908' // Cognitive Service User
 )
 var functionAppCognitiveServicesUserRoleAssignmentName = guid(
   resourceGroup().id,
