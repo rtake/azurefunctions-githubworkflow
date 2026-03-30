@@ -45,36 +45,6 @@ jobs:
             --query accessToken -o tsv)
           echo "arm_token=$ARM_TOKEN" >> "$GITHUB_OUTPUT"
 
-      - name: List model
-        env:
-          ARM_TOKEN: ${{ steps.token.outputs.arm_token }}
-        run: |
-          URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/deployments/gpt-4.1?api-version=${API_VERSION}"
-
-          BODY=$(jq -n \
-            --arg agentName "$AGENT_NAME" \
-            --arg agentVersion "$AGENT_VERSION" \
-            --arg displayName "${AGENT_NAME} deployment" \
-            '{
-              properties: {
-                deploymentState: "Running",
-                model: {
-                  name: "gpt-4.1",
-                  format: "OpenAI",
-                },
-                serviceTier: "Priority"
-              },
-              sku: {
-                name: "GlobalStandard",
-                capacity: 1
-              }
-            }')
-
-          curl -X PUT "$URL" \
-            -H "Authorization: Bearer ${ARM_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "$BODY"
-
       - name: Detect changed agent
         id: changes
         run: |
@@ -118,6 +88,40 @@ jobs:
 
           echo "file=$FILE" >> "$GITHUB_OUTPUT"
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy model
+        if: steps.changes.outputs.file != ''
+        env:
+          FILE: ${{ steps.changes.outputs.file }}
+          ARM_TOKEN: ${{ steps.token.outputs.arm_token }}
+        run: |
+          MODEL_NAME=$(jq -r '.model // empty' "$FILE")
+
+          URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/deployments/${MODEL_NAME}?api-version=${API_VERSION}"
+
+          BODY=$(jq -n \
+            --arg agentName "$AGENT_NAME" \
+            --arg agentVersion "$AGENT_VERSION" \
+            --arg displayName "${AGENT_NAME} deployment" \
+            '{
+              properties: {
+                deploymentState: "Running",
+                model: {
+                  name: "${MODEL_NAME}",
+                  format: "OpenAI",
+                },
+                serviceTier: "Priority"
+              },
+              sku: {
+                name: "GlobalStandard",
+                capacity: 1
+              }
+            }')
+
+          curl -X PUT "$URL" \
+            -H "Authorization: Bearer ${ARM_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$BODY"
 
       - name: Create agent or agent version for existing agent
         id: agent
