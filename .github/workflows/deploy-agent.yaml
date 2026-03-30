@@ -37,22 +37,44 @@ jobs:
         run: |
           set -euo pipefail
 
-          CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep '^agents/.*\.json$' || true)
-          COUNT=$(printf '%s\n' "$CHANGED" | sed '/^$/d' | wc -l | tr -d ' ')
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+          ZERO="0000000000000000000000000000000000000000"
+
+          # diff取得（initial commit対応）
+          if [ "$BEFORE" = "$ZERO" ]; then
+            if git rev-parse "${AFTER}^" >/dev/null 2>&1; then
+              DIFF=$(git diff --name-status "${AFTER}^" "$AFTER")
+            else
+              DIFF=$(git diff-tree --root --no-commit-id --name-status -r "$AFTER")
+            fi
+          else
+            DIFF=$(git diff --name-status "$BEFORE" "$AFTER")
+          fi
+
+          # agents配下のjsonだけ抽出
+          TARGET=$(printf '%s\n' "$DIFF" \
+            | awk '$2 ~ /^agents\/.*\.json$/ { print $1 ":" $2 }')
+
+          COUNT=$(printf '%s\n' "$TARGET" | sed '/^$/d' | wc -l | tr -d ' ')
 
           if [ "$COUNT" -eq 0 ]; then
             echo "file=" >> "$GITHUB_OUTPUT"
+            echo "status=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           if [ "$COUNT" -gt 1 ]; then
-            echo "Only one agent file is allowed"
-            printf '%s\n' "$CHANGED"
+            echo "Only one agent change is allowed"
+            printf '%s\n' "$TARGET"
             exit 1
           fi
 
-          FILE=$(printf '%s\n' "$CHANGED" | sed '/^$/d' | head -n1)
+          STATUS=$(echo "$TARGET" | cut -d: -f1)
+          FILE=$(echo "$TARGET" | cut -d: -f2)
+
           echo "file=$FILE" >> "$GITHUB_OUTPUT"
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
 
       - name: Get Foundry token
         id: foundry_token
