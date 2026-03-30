@@ -289,10 +289,10 @@ jobs:
 
           {
             echo "deployment<<EOF"
-              jq -c --arg deploymentId "$DEPLOYMENT_ID" \
+              $(jq -c -n --arg deploymentId "$DEPLOYMENT_ID" \
                 '{
                   deploymentId: $deploymentId
-                }'
+                }')
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
