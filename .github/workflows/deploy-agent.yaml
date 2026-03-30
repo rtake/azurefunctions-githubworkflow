@@ -241,6 +241,7 @@ jobs:
 
             DEPLOYMENT_NAME="$APP_NAME-$AGENT_VERSION"
             DEPLOY_URL="https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RESOURCE_GROUP_NAME}/providers/Microsoft.CognitiveServices/accounts/${AIFOUNDRY_ACCOUNT_NAME}/projects/${PROJECT_NAME}/applications/${APP_NAME}/agentDeployments/${DEPLOYMENT_NAME}?api-version=${API_VERSION}"
+            echo "DEPLOY_URL $DEPLOY_URL"
 
             DEPLOY_BODY=$(jq -n \
               --arg agentName "$AGENT_NAME" \
