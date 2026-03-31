@@ -1,7 +1,7 @@
 {
   "kind": "prompt",
   "model": "gpt-4.1",
-  "instructions": "最終テスト",
+  "instructions": "20260326 wf更新\n1",
   "tools": [
     {
       "type": "web_search"
