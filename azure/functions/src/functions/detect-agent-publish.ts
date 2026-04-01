@@ -86,7 +86,7 @@ export async function detectAgentPublish(
 
 app.http("detect-agent-publish", {
   methods: ["POST"],
-  authLevel: "function",
+  authLevel: "anonymous",
   extraOutputs: [queueOutput],
   handler: detectAgentPublish,
 });
