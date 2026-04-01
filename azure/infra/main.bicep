@@ -14,6 +14,9 @@ param runtime string = 'node'
 @description('Runtime version')
 param runtimeVersion string = '20'
 
+@description('AAD Client ID for Azure Functions authentication. Inject via CI, do NOT put in source.')
+param aadClientId string = '00000000-0000-0000-0000-000000000000' // dummy
+
 @description('GitHub owner (non-secret, optional)')
 param githubOwner string = ''
 
@@ -25,6 +28,7 @@ param githubRepo string = ''
 param githubToken string = ''
 
 var resourceToken = take(toLower(uniqueString(resourceGroup().id, location)), 6)
+var tenantId = tenant().tenantId
 
 var devAiFoundryAccountName = 'aif-${resourceToken}-dev'
 var prodAiFoundryAccountName = 'aif-${resourceToken}-prod'
@@ -36,7 +40,7 @@ var cognitiveServicesUserRoleDefinitionId = subscriptionResourceId(
 )
 var azureAiUserRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
-  '53ca6127-db72-4b80-b1b0-d745d6d5456d' // Azure AI User 
+  '53ca6127-db72-4b80-b1b0-d745d6d5456d' // Azure AI User
 )
 var resourceGroupContributorRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
@@ -71,6 +75,16 @@ module functionApp './modules/function-app.bicep' = {
     githubToken: githubToken
     storageConnectionString: storageQueue.outputs.storageConnectionString
     queueName: storageQueue.outputs.queueName
+    tenantId: tenantId
+    aadClientId: aadClientId
+  }
+}
+
+module secureWebhookApp './modules/secure-webhook-app.bicep' = {
+  name: 'secureWebhookApp'
+  params: {
+    resourceToken: resourceToken
+    tenantId: tenantId
   }
 }
 
@@ -79,6 +93,10 @@ module monitoring './modules/monitoring.bicep' = {
   params: {
     resourceToken: resourceToken
     monitorScopeId: aiFoundry.outputs.devAccountId
+    tenantId: tenantId
+    serviceUri: 'https://${functionApp.outputs.functionName}.azurewebsites.net'
+    webhookAppObjectId: secureWebhookApp.outputs.appObjectId
+    webhookIdentifierUri: secureWebhookApp.outputs.identifierUri
   }
 }
 
