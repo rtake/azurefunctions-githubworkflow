@@ -69,20 +69,33 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
   }
 }
 
-resource auth 'Microsoft.Web/sites/config@2021-02-01' = {
+resource auth 'Microsoft.Web/sites/config@2022-09-01' = {
   parent: functionApp
-  name: 'authsettings'
+  name: 'authsettingsV2'
   properties: {
-    enabled: true
-    unauthenticatedClientAction: 'RedirectToLoginPage'
-    defaultProvider: 'AzureActiveDirectory'
-    clientId: aadClientId
-    issuer: 'https://sts.windows.net/${tenantId}/'
-    allowedAudiences: [
-      'api://${aadClientId}'
-      'https://${functionName}.azurewebsites.net' // To be updated
-    ]
-    tokenStoreEnabled: true
+    globalValidation: {
+      requireAuthentication: true
+      unauthenticatedClientAction: 'RedirectToLoginPage'
+    }
+    identityProviders: {
+      azureActiveDirectory: {
+        enabled: true
+        registration: {
+          clientId: aadClientId
+          openIdIssuer: 'https://sts.windows.net/${tenantId}/'
+        }
+        validation: {
+          allowedAudiences: [
+            'api://${aadClientId}'
+          ]
+        }
+      }
+    }
+    login: {
+      tokenStore: {
+        enabled: true
+      }
+    }
   }
 }
 
