@@ -126,6 +126,7 @@ Azure Functionsの環境変数に以下の値を設定します。
 | githubRepo  | エージェント定義を管理するGitHubのリポジトリ名名                                                                        |
 | githubToken | GitHub Actions用のシークレット。GitHubのアカウントページのDeveloper settings -> Fine-grained tokensを作成して設定します |
 | aadClientId | 登録したアプリケーションのクライアントID                                                                                |
+| aadObjectId | 登録したアプリケーションのオブジェクトID                                                                                |
 
 ここで設定した変数がAzure Functionsの環境変数に設定されます。
 
@@ -165,13 +166,6 @@ npm install
 npm run build # ビルド
 func azure functionapp publish <FunctionAppName> # デプロイ
 ```
-
-### アラート設定
-
-アラートのアクショングループにデプロイした関数を追加します。
-リソースグループの中のアクショングループの編集画面に進み、アクションに `detect-agent-publish` を追加します。
-
-![](/docs/action-group.png)
 
 ### GitHub Actionsの設定
 
