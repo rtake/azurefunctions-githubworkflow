@@ -13,9 +13,6 @@ param serviceUri string
 @description('Microsoft Entra application object ID for the protected webhook.')
 param webhookAppObjectId string
 
-@description('App ID URI for the protected webhook.')
-param webhookIdentifierUri string
-
 resource actionGroup 'Microsoft.Insights/actionGroups@2021-09-01' = {
   name: 'ag-${resourceToken}'
   location: 'global'
@@ -28,7 +25,6 @@ resource actionGroup 'Microsoft.Insights/actionGroups@2021-09-01' = {
         serviceUri: serviceUri
         tenantId: tenantId
         objectId: webhookAppObjectId
-        identifierUri: webhookIdentifierUri
         useAadAuth: true
         useCommonAlertSchema: true
       }
