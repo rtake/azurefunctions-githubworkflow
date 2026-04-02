@@ -118,8 +118,6 @@ bash infra/app-registration.sh
 
 `azure/infra/example.bicepparam` をコピーして `azure/infra/param.bicepparam` を作成し、下記の変数を設定します。
 
-Azure Functionsの環境変数に以下の値を設定します。
-
 | 変数        | 説明                                                                                                                    |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------- |
 | githubOwner | GitHubリポジトリのユーザー名                                                                                            |
@@ -194,7 +192,7 @@ func azure functionapp publish <FunctionAppName> # デプロイ
 | AZURE_TENANT_ID       | GitHub Actions用のエンタープライズアプリケーションが含まれているテナントのID |
 | AZURE_CLIENT_ID       | GitHub Actions用のエンタープライズアプリケーションのID                       |
 
-リポジトリの構成変数に、mainへのマージ時にエージェントをデプロイする(=本番用の)AI Foundryのアカウント名とリソースグループ名を設定してください。
+構成変数に、mainへのマージ時にエージェントをデプロイする(=本番用の)AI Foundryのアカウント名とリソースグループ名を設定してください。
 
 | 変数名                 | 概要                     |
 | ---------------------- | ------------------------ |
